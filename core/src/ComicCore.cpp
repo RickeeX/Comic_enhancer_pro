@@ -152,3 +152,5 @@ extern "C" int ce_estimate_skew(const uint8_t*src,uint32_t w,uint32_t h,int32_t 
 
 extern "C" int32_t ce_set_thread_budget(int32_t value){int old=threadBudget;threadBudget=std::clamp(value,0,64);return old;}
 #include "GrayCore.hpp"
+
+extern "C" int32_t ce_get_thread_budget(void){return threadBudget;}

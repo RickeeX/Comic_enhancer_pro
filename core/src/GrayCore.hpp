@@ -2,9 +2,20 @@
 // reused within a page and never shared across concurrent page renders.
 struct CEGrayWorkspace {
     std::vector<uint8_t> a,b;
+    std::array<uint8_t,65536>blend{};
+    float blendAmount=-1,blendThreshold=-1;bool blendSharpen=false;
     int backend=0; // 0 auto, 1 portable, 2 Accelerate (Mac only)
 };
 namespace {
+uint8_t grayBlend(int original,int soft,float amount,float threshold,bool sharpen){
+    if(sharpen){float delta=original-float(soft);return std::abs(delta)>=threshold?byte(original+amount*delta):uint8_t(original);}
+    return byte(original+(soft-float(original))*amount);
+}
+void grayBlendTable(CEGrayWorkspace&ws,float amount,float threshold,bool sharpen){
+    if(ws.blendAmount==amount&&ws.blendThreshold==threshold&&ws.blendSharpen==sharpen)return;
+    for(int a=0;a<256;++a)for(int b=0;b<256;++b)ws.blend[a*256+b]=grayBlend(a,b,amount,threshold,sharpen);
+    ws.blendAmount=amount;ws.blendThreshold=threshold;ws.blendSharpen=sharpen;
+}
 bool graySupported(const CEOptions&o){return valid(o)&&o.deskew==0&&o.angle==0&&o.cleanup==0&&(!o.blur||o.blur_method<=1);}
 #if defined(__APPLE__)
 bool acceleratedGaussian(const uint8_t*src,uint32_t w,uint32_t h,int radius,int threads,CEGrayWorkspace&ws){
@@ -46,7 +57,7 @@ template<int R> void grayGaussian(const uint8_t*src,uint32_t w,uint32_t h,int th
 }
 void graySmooth(const uint8_t*src,uint32_t w,uint32_t h,int radius,bool box,int threads,CEGrayWorkspace&ws){
 #if defined(__APPLE__)
-    if(!box&&ws.backend==2&&acceleratedGaussian(src,w,h,radius,threads,ws))return;
+    if(!box&&ws.backend!=1&&acceleratedGaussian(src,w,h,radius,threads,ws))return;
 #endif
     if(!box){switch(radius){case 1:grayGaussian<1>(src,w,h,threads,ws);break;case 2:grayGaussian<2>(src,w,h,threads,ws);break;default:grayGaussian<3>(src,w,h,threads,ws);}return;}
     int taps=radius*2+1;ws.a.resize(size_t(w)*h);ws.b.resize(size_t(w)*h);
@@ -108,15 +119,23 @@ extern "C" int ce_process_gray(const uint8_t*src,uint32_t w,uint32_t h,const CEO
         std::array<uint8_t,256>lut{};for(int i=0;i<256;++i){float v=std::clamp((i-low)/float(high-low),0.f,1.f);v=std::clamp(((v-.5f)*o->contrast+.5f+o->brightness)/o->white_point,0.f,1.f);lut[i]=byte(255*std::pow(v,o->gamma));}
         auto sample=[&](int rx,int ry){rx=std::clamp(rx,0,int(g.rw)-1);ry=std::clamp(ry,0,int(g.rh)-1);uint32_t x=rx,y=ry;
             switch(o->rotation){case 1:x=ry;y=g.h-1-rx;break;case 2:x=g.w-1-rx;y=g.h-1-ry;break;case 3:x=g.w-1-ry;y=rx;break;}return float(src[size_t(g.y+y)*w+g.x+x]);};
-        rows(oh,o->threads,[&](uint32_t a,uint32_t b){for(uint32_t y=a;y<b;++y)for(uint32_t x=0;x<ow;++x){
+        bool identity=true;for(int i=0;i<256;++i)if(lut[i]!=i){identity=false;break;}
+        rows(oh,o->threads,[&](uint32_t a,uint32_t b){
+            if(ow==g.rw&&oh==g.rh&&o->rotation==0){for(uint32_t y=a;y<b;++y){auto in=src+size_t(g.y+y)*w+g.x;auto out=dst+size_t(y)*ow;
+                if(identity)std::copy_n(in,ow,out);else for(uint32_t x=0;x<ow;++x)out[x]=lut[in[x]];}return;}
+            for(uint32_t y=a;y<b;++y)for(uint32_t x=0;x<ow;++x){
             if(ow==g.rw&&oh==g.rh){dst[size_t(y)*ow+x]=lut[uint8_t(sample(x,y))];continue;}
             float sx=(x+.5f)*g.rw/ow-.5f,sy=(y+.5f)*g.rh/oh-.5f;int ix=int(std::floor(sx)),iy=int(std::floor(sy));float fx=sx-ix,fy=sy-iy;
             float top=sample(ix,iy)*(1-fx)+sample(ix+1,iy)*fx,bot=sample(ix,iy+1)*(1-fx)+sample(ix+1,iy+1)*fx;dst[size_t(y)*ow+x]=lut[byte(top*(1-fy)+bot*fy)];
         }});
-        if(o->blur){graySmooth(dst,ow,oh,o->filter_radius,o->blur_method==1,o->threads,ws);rows(oh,o->threads,[&](uint32_t a,uint32_t b){for(size_t i=size_t(a)*ow;i<size_t(b)*ow;++i)dst[i]=byte(dst[i]+(ws.b[i]-float(dst[i]))*o->blur);});}
-        if(o->sharpen){if(o->sharpen_method==0)graySmooth(dst,ow,oh,o->filter_radius,false,o->threads,ws);else ws.a.assign(dst,dst+size_t(ow)*oh);
-            rows(oh,o->threads,[&](uint32_t a,uint32_t b){for(uint32_t y=a;y<b;++y)for(uint32_t x=0;x<ow;++x){size_t i=size_t(y)*ow+x;float delta;
-                if(!o->sharpen_method)delta=dst[i]-float(ws.b[i]);else{auto get=[&](int xx,int yy){return ws.a[size_t(std::clamp(yy,0,int(oh)-1))*ow+std::clamp(xx,0,int(ow)-1)];};delta=(4.f*ws.a[i]-get(int(x)-1,y)-get(int(x)+1,y)-get(x,int(y)-1)-get(x,int(y)+1))*.25f;}
+        if(o->blur){graySmooth(dst,ow,oh,o->filter_radius,o->blur_method==1,o->threads,ws);grayBlendTable(ws,o->blur,0,false);rows(oh,o->threads,[&](uint32_t a,uint32_t b){for(size_t i=size_t(a)*ow;i<size_t(b)*ow;++i)dst[i]=ws.blend[size_t(dst[i])*256+ws.b[i]];});}
+        if(o->sharpen){if(o->sharpen_method==0){graySmooth(dst,ow,oh,o->filter_radius,false,o->threads,ws);grayBlendTable(ws,o->sharpen,o->sharpen_threshold,true);}else ws.a.assign(dst,dst+size_t(ow)*oh);
+            bool identity=true;for(int i=0;i<256;++i)if(lut[i]!=i){identity=false;break;}
+        rows(oh,o->threads,[&](uint32_t a,uint32_t b){
+            if(ow==g.rw&&oh==g.rh&&o->rotation==0){for(uint32_t y=a;y<b;++y){auto in=src+size_t(g.y+y)*w+g.x;auto out=dst+size_t(y)*ow;
+                if(identity)std::copy_n(in,ow,out);else for(uint32_t x=0;x<ow;++x)out[x]=lut[in[x]];}return;}
+            for(uint32_t y=a;y<b;++y)for(uint32_t x=0;x<ow;++x){size_t i=size_t(y)*ow+x;float delta;
+                if(!o->sharpen_method){dst[i]=ws.blend[size_t(dst[i])*256+ws.b[i]];continue;}else{auto get=[&](int xx,int yy){return ws.a[size_t(std::clamp(yy,0,int(oh)-1))*ow+std::clamp(xx,0,int(ow)-1)];};delta=(4.f*ws.a[i]-get(int(x)-1,y)-get(int(x)+1,y)-get(x,int(y)-1)-get(x,int(y)+1))*.25f;}
                 if(std::abs(delta)>=o->sharpen_threshold)dst[i]=byte(dst[i]+o->sharpen*delta);
             }});
         }
@@ -148,4 +167,10 @@ extern "C" int ce_gray_pack(const uint8_t*src,uint32_t w,uint32_t h,int32_t bits
         for(uint32_t x=0;x<w;++x){int value=(int(src[size_t(y)*w+x])*((1<<bits)-1)+127)/255;size_t bit=size_t(x)*bits;out[bit/8]|=uint8_t(value<<(8-bits-bit%8));}
     }});return 0;
     }catch(...){return -4;}
+}
+
+extern "C" int ce_gray_blend_table(float amount,float threshold,int32_t sharpen,uint8_t*dst,size_t n){
+    if(!dst||n<65536||!std::isfinite(amount)||!std::isfinite(threshold)||amount<0||amount>2||threshold<0||threshold>255||sharpen<0||sharpen>1)return -1;
+    for(int a=0;a<256;++a)for(int b=0;b<256;++b)dst[a*256+b]=grayBlend(a,b,amount,threshold,sharpen!=0);
+    return 0;
 }

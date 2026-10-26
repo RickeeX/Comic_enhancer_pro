@@ -78,7 +78,7 @@ jobs:
           python3 - <<'PYCODE'
           from pathlib import Path
           for line in Path('.build/acceleration.log').read_text().splitlines():
-              if 'MP ' in line or 'Metal evaluation:' in line:
+              if line.startswith('17.78 MP ') or line.startswith('Metal evaluation:') or line.startswith('Metal automatic decision:'):
                   print(f'::notice title=Mac acceleration evaluation::{line}')
           PYCODE
       - name: Compare complete native stack with v0.4.2

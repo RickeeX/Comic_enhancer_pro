@@ -94,6 +94,8 @@ int ce_whiten_outside_gray(uint8_t *p,uint32_t w,uint32_t h,const float rect[4])
 int ce_blit_gray(const uint8_t *src,uint32_t w,uint32_t h,uint8_t *dst,uint32_t dw,uint32_t dh,uint32_t x,uint32_t y,size_t capacity);
 /* Per-calling-thread cap for a bounded page pipeline. Returns previous cap. */
 int32_t ce_set_thread_budget(int32_t threads);
+int32_t ce_get_thread_budget(void);
+int ce_gray_blend_table(float amount,float threshold,int32_t sharpen,uint8_t *dst,size_t capacity);
 #ifdef __cplusplus
 }
 #endif
