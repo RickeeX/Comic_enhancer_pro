@@ -78,7 +78,7 @@ jobs:
           python3 - <<'PYCODE'
           from pathlib import Path
           for line in Path('.build/acceleration.log').read_text().splitlines():
-              if line.startswith('17.78 MP ') or line.startswith('Metal evaluation:') or line.startswith('Metal automatic decision:'):
+              if line.startswith('17.78 MP ') or line.startswith('Metal evaluation:'):
                   print(f'::notice title=Mac acceleration evaluation::{line}')
           PYCODE
       - name: Compare complete native stack with v0.4.2
@@ -106,7 +106,7 @@ jobs:
           COMIC_TRACE_BATCH=1 .build/macos-tests --benchmark-batch 2>&1 | tee .build/batch-performance.log
           batch_status=${PIPESTATUS[0]}
           echo "$batch_status" > .build/batch-exit.txt
-          if [[ "$batch_status" != 0 ]]; then exit "$batch_status"; fi
+          if [[ "$batch_status" != 0 ]]; then cp .build/macos-tests .build/macos-tests.native; exit "$batch_status"; fi
           set -e
           python3 - <<'PYCODE'
           from pathlib import Path
@@ -135,7 +135,7 @@ jobs:
           os.environ['COMIC_TRACE_BATCH']='1'
           from pathlib import Path
           try:
-              result=subprocess.run(['lldb','--batch','-o','run','-k','thread backtrace all','--','.build/macos-tests','--benchmark-batch'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=150)
+              result=subprocess.run(['lldb','--batch','-o','run','-k','thread backtrace all','--','.build/macos-tests.native','--benchmark-batch'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=150)
               Path('.build/batch-backtrace.log').write_text(result.stdout)
               lines=result.stdout.splitlines()
               positions=[i for i,line in enumerate(lines) if 'stop reason' in line or 'frame #0' in line or 'frame #10' in line or 'frame #20' in line]

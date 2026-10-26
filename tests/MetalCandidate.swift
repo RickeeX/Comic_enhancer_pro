@@ -3,14 +3,11 @@ import Metal
 
 // Exact integer binomial passes; CPU-generated blend tables preserve the
 // existing float rounding for every possible original/blurred byte pair.
-final class MetalFilters {
-    static let availability:Result<MetalFilters,Error> = Result { try MetalFilters() }
-    static var shared:MetalFilters? { try? availability.get() }
+final class MetalCandidate {
+    static let availability:Result<MetalCandidate,Error> = Result { try MetalCandidate() }
+    static var shared:MetalCandidate? { try? availability.get() }
     let device:MTLDevice
     private let queue:MTLCommandQueue,pipeline:MTLComputePipelineState
-    private let lock=NSLock()
-    private var choices:[String:Bool]=[:]
-    private var validated=false
     private static let shader="""
     #include <metal_stdlib>
     using namespace metal;
@@ -56,47 +53,5 @@ final class MetalFilters {
             guard commands.status == .completed else { throw commands.error ?? ProcessingError.message("Metal 计算失败。") }
             return try withExtendedLifetime(output) { try GrayPlane(width:source.width,height:source.height) { out in out.baseAddress!.update(from:output.contents().assumingMemoryBound(to:UInt8.self),count:count) } }
         }
-    }
-    // One exact canary suite before GPU use. Actual settings use their own
-    // exhaustive byte-pair LUT; small/odd dimensions exercise boundary handling.
-    private func validate() throws {
-        let ws=try GrayWorkspace();ce_gray_workspace_backend(ws.core,1)
-        for (w,h) in [(1,1),(2,3),(17,19)] { for radius in 1...3 {
-            let source=try GrayPlane(width:w,height:h) { out in for i in 0..<out.count { out[i]=UInt8((i*71+radius*31)%256) } }
-            var blur=Settings();blur.blur=0.37;blur.filterRadius=radius
-            var usm=Settings();usm.sharpen=1.13;usm.filterRadius=4-radius;usm.sharpenThreshold=2
-            let cpu=try source.process(blur,workspace:ws)!.process(usm,workspace:ws)!
-            let gpu=try run(source,blur:blur,usm:usm)
-            guard cpu.hasSamePixels(as:gpu) else { throw ProcessingError.message("Metal 像素校验未通过。") }
-        } }
-    }
-    var decisionDescription:String {
-        lock.lock();defer { lock.unlock() }
-        return choices.sorted{$0.key<$1.key}.map{"\($0.key)=\($0.value ? "Metal":"CPU")"}.joined(separator:", ")
-    }
-    @inline(never)
-    func automatic(_ source:GrayPlane,blur:Settings,usm:Settings,workspace:GrayWorkspace) -> GrayPlane? {
-        guard source.width*source.height>=4_000_000 else { return nil }
-        let key="\(ce_get_thread_budget())-\(source.width*source.height>=16_000_000)-\(blur.filterRadius)-\(usm.filterRadius)"
-        lock.lock()
-        if let enabled=choices[key] {
-            lock.unlock();if !enabled { return nil }
-            do { return try run(source,blur:blur,usm:usm) }
-            catch { lock.lock();choices[key]=false;lock.unlock();return nil }
-        }
-        defer { lock.unlock() }
-        // Calibrate on this device and page size. The CPU output also supplies
-        // an exact fallback without recomputing the first candidate pair.
-        let start=Date()
-        guard let first=try? source.process(blur,workspace:workspace),let cpu=try? first.process(usm,workspace:workspace) else { choices[key]=false;return nil }
-        let cpuTime=Date().timeIntervalSince(start)
-        do {
-            if !validated { try validate();validated=true }
-            let begin=Date(),gpu=try run(source,blur:blur,usm:usm)
-            let gpuTime=Date().timeIntervalSince(begin)
-            guard cpu.hasSamePixels(as:gpu) else { choices[key]=false;return cpu }
-            let enabled=gpuTime<cpuTime*0.85
-            choices[key]=enabled;return enabled ? gpu:cpu
-        } catch { choices[key]=false;return cpu }
     }
 }

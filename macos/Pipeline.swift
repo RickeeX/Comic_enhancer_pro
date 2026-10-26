@@ -92,18 +92,6 @@ enum Pipeline {
             if cancelled() { throw CancellationError() }
             let stage=stages[index]
             if traceEnabled { print("[Pipeline] begin \(stage.kind.rawValue)");fflush(stdout) }
-            if let gray=f.gray,gray.width*gray.height>=4_000_000,index+1<stages.count,stage.kind == .blur,stages[index+1].kind == .sharpen,
-               stage.settings.blur>0,stage.settings.blurMethod==0,stages[index+1].settings.sharpen>0,stages[index+1].settings.sharpenMethod==0,
-               let metal=MetalFilters.shared {
-                let ratio=min(Double(f.pixelWidth)/Double(f.logicalWidth),Double(f.pixelHeight)/Double(f.logicalHeight))
-                var blur=Settings(),usm=Settings()
-                blur.blur=stage.settings.blur;blur.filterRadius=max(1,Int((Double(stage.settings.filterRadius)*ratio).rounded()))
-                usm.sharpen=stages[index+1].settings.sharpen;usm.sharpenThreshold=stages[index+1].settings.sharpenThreshold
-                usm.filterRadius=max(1,Int((Double(stages[index+1].settings.filterRadius)*ratio).rounded()))
-                if let result=autoreleasepool(invoking:{metal.automatic(gray,blur:blur,usm:usm,workspace:workspace)}) {
-                    f.gray=result;if f.grayLevels>=0 { f.grayLevels=0 };index += 2;continue
-                }
-            }
             try autoreleasepool { try apply(stage,to:&f,preview:preview,pageIndex:pageIndex,workspace:workspace) }
             if traceEnabled { print("[Pipeline] end \(stage.kind.rawValue)");fflush(stdout) }
             index += 1

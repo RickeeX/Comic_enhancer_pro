@@ -26,7 +26,7 @@ struct AccelerationBenchmark {
             }
             print(String(format:"17.78 MP Gray8 %@ Gaussian+USM mean: %.1f ms",backend==1 ? "portable":"vImage candidate",samples.reduce(0,+)/Double(samples.count)))
         }
-        guard let metal=MetalFilters.shared else { print("Metal evaluation: unavailable on this runner; no GPU speed/quality claim");return }
+        guard let metal=MetalCandidate.shared else { print("Metal evaluation: unavailable on this runner; no GPU speed/quality claim");return }
         let plane=try GrayPlane(width:w,height:h) { out in out.baseAddress!.update(from:source,count:count) }
         var blur=Settings();blur.blur=0.3;blur.filterRadius=1
         var usm=Settings();usm.sharpen=0.6;usm.filterRadius=2;usm.sharpenThreshold=2
@@ -38,11 +38,6 @@ struct AccelerationBenchmark {
             if trial>=0 { samples.append(ms) }
         }
         guard maximumDifference==0 else { fatalError("Production Metal changed filter pixels") }
-        let workspace=try GrayWorkspace()
-        if let result=metal.automatic(plane,blur:blur,usm:usm,workspace:workspace) {
-            guard result.data as Data == Data(reference) else { fatalError("Automatic backend changed pixels") }
-        }
         print(String(format:"17.78 MP Metal Gaussian+USM: %.1f ms including upload/allocation/download/LUT; max channel difference=%d; device=%@",samples.reduce(0,+)/Double(samples.count),maximumDifference,metal.device.name))
-        print("Metal automatic decision: \(metal.decisionDescription)")
     }
 }
