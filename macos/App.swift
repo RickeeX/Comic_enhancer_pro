@@ -45,7 +45,13 @@ struct WorkspaceView: View {
                     Picker("读取方式", selection: $model.pdfMode) {
                         Text("按页渲染").tag(0); Text("提取内嵌图片").tag(1)
                     }.pickerStyle(.segmented).labelsHidden()
-                    if model.pdfMode == 0 { Stepper("渲染：\(model.pdfDPI) DPI", value: $model.pdfDPI, in: 72...600, step: 25).font(.caption) }
+                    if model.pdfMode == 0 {
+                        HStack {
+                            Text("渲染 DPI").font(.caption)
+                            TextField("72–600", value: $model.pdfDPI, format: .number.grouping(.never)).textFieldStyle(.roundedBorder).frame(width: 65)
+                            Stepper("DPI", value: $model.pdfDPI, in: 72...600, step: 25).labelsHidden()
+                        }
+                    }
                     Text(model.pdfMode == 0 ? "保留文字、矢量和页面排版；按需逐页渲染。" : "每张 XObject 图片独立列出；不包含矢量文字与页面排版。")
                         .font(.caption2).foregroundStyle(.secondary)
                     Button(action: model.addFiles) { Label(model.importing ? "建立索引中…" : "导入图片 / PDF", systemImage: "plus").frame(maxWidth: .infinity) }

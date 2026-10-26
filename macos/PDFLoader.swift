@@ -35,7 +35,7 @@ enum PDFLoader {
         for (_, object) in entries.values.sorted(by: { $0.0 < $1.0 }) {
             var stream: CGPDFStreamRef?
             guard CGPDFObjectGetValue(object, .stream, &stream), let stream = stream else { continue }
-            let dict = CGPDFStreamGetDictionary(stream)
+            guard let dict = CGPDFStreamGetDictionary(stream) else { continue }
             var subtype: UnsafePointer<CChar>?
             guard CGPDFDictionaryGetName(dict, "Subtype", &subtype), let subtype = subtype else { continue }
             if String(cString: subtype) == "Image" {
@@ -103,7 +103,7 @@ enum PDFLoader {
         return image
     }
     private static func embedded(_ stream: CGPDFStreamRef, preview: Bool) throws -> CGImage {
-        let dict = CGPDFStreamGetDictionary(stream)
+        guard let dict = CGPDFStreamGetDictionary(stream) else { throw ProcessingError.message("PDF 图片字典损坏。") }
         var w: CGPDFInteger = 0, h: CGPDFInteger = 0, bits: CGPDFInteger = 8
         _ = CGPDFDictionaryGetInteger(dict, "Width", &w); _ = CGPDFDictionaryGetInteger(dict, "Height", &h)
         _ = CGPDFDictionaryGetInteger(dict, "BitsPerComponent", &bits)
@@ -114,6 +114,13 @@ enum PDFLoader {
         if CGPDFDictionaryGetArray(dict, "Decode", &decode) { throw ProcessingError.message("此图片有自定义 Decode 映射，请选择按页渲染以保留外观。") }
         if CGPDFDictionaryGetArray(dict, "Mask", &colorMask) || CGPDFDictionaryGetStream(dict, "SMask", &mask) || CGPDFDictionaryGetStream(dict, "Mask", &mask) {
             throw ProcessingError.message("此内嵌图片有透明掩膜，请选择 PDF 按页渲染以保留外观。")
+        }
+        var colorArray: CGPDFArrayRef?
+        var colorName: UnsafePointer<CChar>?
+        if CGPDFDictionaryGetArray(dict, "ColorSpace", &colorArray) { throw ProcessingError.message("此图片使用特殊色彩空间，请选择按页渲染。") }
+        if CGPDFDictionaryGetName(dict, "ColorSpace", &colorName), let name = colorName,
+           !["DeviceGray", "G", "DeviceRGB", "RGB", "DeviceCMYK", "CMYK"].contains(String(cString: name)) {
+            throw ProcessingError.message("此图片使用自定义色彩空间，请选择按页渲染。")
         }
         var format = CGPDFDataFormat.raw
         guard let data = CGPDFStreamCopyData(stream, &format) else { throw ProcessingError.message("无法解压 PDF 图片。") }
