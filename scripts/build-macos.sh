@@ -22,5 +22,5 @@ xcrun lipo -create "$BUILD/ComicEnhancer-arm64" "$BUILD/ComicEnhancer-x86_64" -o
 cp macos/Info.plist "$APP/Contents/Info.plist"
 codesign --force --deep --sign - "$APP"
 codesign --verify --deep --strict "$APP"
-xcrun lipo -verify_arch arm64 x86_64 "$APP/Contents/MacOS/ComicEnhancer"
+xcrun lipo "$APP/Contents/MacOS/ComicEnhancer" -verify_arch arm64 x86_64
 echo "Built: $APP"
