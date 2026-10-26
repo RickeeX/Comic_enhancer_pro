@@ -70,3 +70,9 @@ ctest --test-dir build --output-on-failure
 ```
 
 测试覆盖像素恒等、各方向旋转、奇数宽度分页、边界插值、Gamma、灰度、色阶、滤波、量化、串并行一致性及非法缓冲／参数／尺寸。macOS 集成测试额外覆盖 ImageIO 读写、变换、PNG/JPEG/TIFF 往返、JSON 参数和损坏输入。
+
+## 下载试用版与发布
+
+[GitHub Releases](https://github.com/RickeeX/Comic_enhancer_pro/releases) 提供通用版 `.app` 的 ZIP 包，解压即可得到应用；不需要安装开发工具。下载条件和签名说明见每个版本的发行说明。
+
+维护者发布新的 `v*` Git 标签后，CI 会重新测试并构建。仅在 Linux、Intel Mac 和 Apple Silicon Mac 全部成功后，才创建对应 GitHub Release，上传 `ComicEnhancer-macOS-universal.zip` 和 `SHA256SUMS.txt`。发布说明使用 `docs/release-notes.md`；发布前同步更新应用版本与说明。
