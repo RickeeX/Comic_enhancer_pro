@@ -1,4 +1,5 @@
 name: Diagnose ARM batch safety
+# Diagnostic revision: raw-byte comparison, debug symbols.
 on:
   workflow_dispatch:
   push:

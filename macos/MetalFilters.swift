@@ -67,7 +67,7 @@ final class MetalFilters {
             var usm=Settings();usm.sharpen=1.13;usm.filterRadius=4-radius;usm.sharpenThreshold=2
             let cpu=try source.process(blur,workspace:ws)!.process(usm,workspace:ws)!
             let gpu=try run(source,blur:blur,usm:usm)
-            guard cpu.data as Data == gpu.data as Data else { throw ProcessingError.message("Metal 像素校验未通过。") }
+            guard cpu.hasSamePixels(as:gpu) else { throw ProcessingError.message("Metal 像素校验未通过。") }
         } }
     }
     var decisionDescription:String {
@@ -93,7 +93,7 @@ final class MetalFilters {
             if !validated { try validate();validated=true }
             let begin=Date(),gpu=try run(source,blur:blur,usm:usm)
             let gpuTime=Date().timeIntervalSince(begin)
-            guard cpu.data as Data == gpu.data as Data else { choices[key]=false;return cpu }
+            guard cpu.hasSamePixels(as:gpu) else { choices[key]=false;return cpu }
             let enabled=gpuTime<cpuTime*0.85
             choices[key]=enabled;return enabled ? gpu:cpu
         } catch { choices[key]=false;return cpu }

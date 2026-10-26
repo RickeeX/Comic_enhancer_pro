@@ -30,6 +30,10 @@ final class GrayPlane {
     func withBytes<T>(_ body:(UnsafePointer<UInt8>) throws -> T) rethrows -> T {
         try withExtendedLifetime(data) { try body(CFDataGetBytePtr(data)!) }
     }
+    func hasSamePixels(as other:GrayPlane) -> Bool {
+        guard width==other.width,height==other.height else { return false }
+        return withBytes { lhs in other.withBytes { rhs in memcmp(lhs,rhs,width*height)==0 } }
+    }
     static func normalized(_ image:CGImage) throws -> GrayPlane? {
         var status:Int32=0
         let plane=try GrayPlane(width:image.width,height:image.height) { out in

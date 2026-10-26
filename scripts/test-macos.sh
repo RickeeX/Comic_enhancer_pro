@@ -4,7 +4,7 @@ cd "$(dirname "$0")/.."
 export MACOSX_DEPLOYMENT_TARGET=13.0
 mkdir -p .build
 CXX_FLAGS=(-O2)
-SWIFT_FLAGS=(-O)
+SWIFT_FLAGS=(-O -g)
 if [[ "${COMIC_SANITIZE:-0}" == 1 ]]; then
   CXX_FLAGS=(-O1 -g -fsanitize=address -fno-omit-frame-pointer)
   SWIFT_FLAGS=(-O -g -sanitize=address)
