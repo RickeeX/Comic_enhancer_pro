@@ -63,7 +63,7 @@ enum PDFLoader {
     }
     static func items(_ url: URL, embedded: Bool, dpi: Int) throws -> [PageItem] {
         lock.lock(); defer { lock.unlock() }
-        guard (72...600).contains(dpi) else { throw ProcessingError.message("PDF DPI 需在 72–600 之间。") }
+        guard (72...1200).contains(dpi) else { throw ProcessingError.message("PDF DPI 需在 72–1200 之间。") }
         let doc = try document(url)
         var items: [PageItem] = []
         for number in 1...doc.numberOfPages {

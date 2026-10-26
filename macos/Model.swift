@@ -256,6 +256,7 @@ final class Model: ObservableObject {
         previewing = true
         let work = DispatchWorkItem {
             guard !cancel.isCancelled else { return }
+            self.previewCache = self.previewCache.filter { $0.key == page || $0.key == next }
             let result = Result { try autoreleasepool { try self.renderedPreview(page, recipe: firstRecipe, preview: previewMode, index: firstIndex) } }
             guard !cancel.isCancelled else { return }
             let second: Result<PipelineResult, Error>? = next.flatMap { item in nextRecipe.map { config in Result { try autoreleasepool { try self.renderedPreview(item, recipe: config, preview: previewMode, index: firstIndex+1) } } } }

@@ -35,7 +35,7 @@ struct WorkspaceView: View {
                     Label("PDF 导入设置", systemImage: "doc.text").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     Picker("读取方式", selection: $model.pdfMode) { Text("按页渲染").tag(0); Text("内嵌图片").tag(1) }.pickerStyle(.segmented).labelsHidden()
                     if model.pdfMode == 0 {
-                        HStack { Text("DPI").font(.caption); TextField("72–600", value: $model.pdfDPI, format: .number.grouping(.never)).textFieldStyle(.roundedBorder) }
+                        HStack { Text("DPI").font(.caption); TextField("72–1200", value: $model.pdfDPI, format: .number.grouping(.never)).textFieldStyle(.roundedBorder) }
                     }
                     Button(action: model.addFiles) { Label(model.importing ? "建立索引中…" : "导入图片 / PDF", systemImage: "plus").frame(maxWidth: .infinity) }.buttonStyle(.borderedProminent)
                     HStack { Button("打开工程", action: model.loadProject); Button("保存工程", action: model.saveProject) }.controlSize(.small)
@@ -120,7 +120,7 @@ struct RecipeInspector: View {
                 Button(action: model.redoEdit) { Image(systemName: "arrow.uturn.forward") }.disabled(!model.canRedo)
             }.controlSize(.small).padding(14)
             HStack {
-                Menu("添加操作") { ForEach(StageKind.allCases) { kind in Button(kind.title) { model.addStage(kind) } } }
+                Menu("添加操作") { ForEach(StageKind.allCases.filter { $0 != .page }) { kind in Button(kind.title) { model.addStage(kind) } } }
                 Menu("应用 / 复制") {
                     Button("应用到所有页面") { model.applyRecipe("all") }
                     Button("应用到自选页面…") { model.applyRecipe("selected") }
@@ -181,7 +181,7 @@ struct StageEditor: View {
             case .gray: GrayEditor()
             case .binary: BinaryEditor()
             case .despeckle: SpeckleEditor()
-            case .page: PageEditor()
+            case .page, .resize, .rotate, .deskew, .crop, .layout: PageEditor(kind:kind)
             case .mirror:
                 Toggle("水平镜像", isOn: $model.settings.flipHorizontal)
                 Toggle("上下翻转", isOn: $model.settings.flipVertical)
@@ -298,19 +298,25 @@ struct SpeckleEditor: View {
 }
 struct PageEditor: View {
     @EnvironmentObject var model: Model
+    var kind: StageKind = .page
     var body: some View {
         VStack(alignment: .leading, spacing: 15) {
+            if kind == .page || kind == .rotate || kind == .deskew {
             DisclosureGroup("方向与纠斜") {
                 VStack(spacing: 12) {
-                    Picker("分页", selection: $model.settings.page) { Text("整页").tag(0); Text("左半页").tag(1); Text("右半页").tag(2) }
-                    Picker("旋转", selection: $model.settings.rotation) { ForEach(0..<4) { Text("\($0*90)°").tag($0) } }
+                    if kind == .page || kind == .rotate { Picker("旋转", selection: $model.settings.rotation) { ForEach(0..<4) { Text("\($0*90)°").tag($0) } } }
+                    if kind == .page || kind == .deskew {
                     Picker("自动纠斜", selection: $model.settings.deskew) { Text("关闭").tag(0); Text("横排").tag(1); Text("竖排").tag(2) }
                     Adjustment(title: "自动搜索范围 ±°", value: $model.settings.deskewLimit, range: 1...10)
                     Adjustment(title: "顺时针微调 °", value: $model.settings.angle, range: -15...15)
+                    }
                 }.padding(.top, 10)
             }
+            }
+            if kind == .page || kind == .crop {
             DisclosureGroup("裁边与自动内容框") {
                 VStack(spacing: 12) {
+                    Picker("分页", selection: $model.settings.page) { Text("整页").tag(0); Text("左半页").tag(1); Text("右半页").tag(2) }
                     Adjustment(title: "对称裁边", value: $model.settings.crop, range: 0...0.2, displayScale: 100)
                     Adjustment(title: "左裁边 %", value: $model.settings.cropLeft, range: 0...0.45, displayScale: 100)
                     Adjustment(title: "右裁边 %", value: $model.settings.cropRight, range: 0...0.45, displayScale: 100)
@@ -325,6 +331,8 @@ struct PageEditor: View {
                     }
                 }.padding(.top, 10)
             }
+            }
+            if kind == .page || kind == .resize {
             Divider()
             Toggle("保持当前物理尺寸，改变 DPI", isOn: $model.settings.preservePhysical)
             NumericField(title: "源 X DPI（0=自动）", value: $model.settings.sourceDPI)
@@ -334,6 +342,8 @@ struct PageEditor: View {
                 Text("先重采样增加像素，再执行后续锐化 / 模糊 / 二值化。不会凭空恢复扫描中没有的细节。").font(.caption2).foregroundStyle(.secondary)
             } else { Adjustment(title: "像素缩放 %（会改变物理尺寸）", value: $model.settings.scale, range: 0.1...2, displayScale: 100) }
             Picker("重采样", selection: $model.settings.resampleMethod) { Text("最近邻").tag(0); Text("双线性").tag(1); Text("双三次").tag(2) }
+            }
+            if kind == .page || kind == .layout {
             Divider()
             Picker("页面尺寸", selection: $model.settings.pageMode) {
                 Text("保持当前页面").tag(0); Text("指定宽度，等比计算高度").tag(1); Text("指定高度，等比计算宽度").tag(2)
@@ -356,7 +366,13 @@ struct PageEditor: View {
                 Picker("水平对齐", selection: $model.settings.alignX) { Text("左").tag(0); Text("居中").tag(1); Text("右").tag(2) }
                 Picker("垂直对齐", selection: $model.settings.alignY) { Text("上").tag(0); Text("居中").tag(1); Text("下").tag(2) }
             }
+            }
+            if kind == .page || kind == .crop || kind == .layout {
             Toggle("奇偶页交换左右边距 / 裁边", isOn: $model.settings.alternateMargins)
+            }
+            if kind == .layout {
+                Picker("重采样",selection:$model.settings.resampleMethod) { Text("最近邻").tag(0);Text("双线性").tag(1);Text("双三次").tag(2) }
+            }
             Text("固定页面宽高可统一扫描页大小；“完整放入”保持比例，“拉伸”才会改变内容宽高比例。所有新增空白填白。未知 DPI 暂按 300，请按实际扫描参数指定。")
                 .font(.caption2).foregroundStyle(.secondary)
         }

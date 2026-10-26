@@ -1,11 +1,16 @@
 import Foundation
 
 enum StageKind: String, Codable, CaseIterable, Identifiable {
-    case page, tone, sharpen, blur, gray, binary, despeckle, mirror, invert
+    case page, resize, rotate, deskew, crop, layout, tone, sharpen, blur, gray, binary, despeckle, mirror, invert
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .page: return "页面 / DPI / 排版"
+        case .page: return "综合页面（旧预设兼容）"
+        case .resize: return "重采样 / 物理 DPI"
+        case .rotate: return "页面旋转"
+        case .deskew: return "水平矫正"
+        case .crop: return "分页 / 裁边 / 内容框"
+        case .layout: return "统一页面 / 边距"
         case .tone: return "亮度 · 对比度 · Gamma"
         case .sharpen: return "锐化"
         case .blur: return "模糊 / 降噪"
@@ -18,7 +23,7 @@ enum StageKind: String, Codable, CaseIterable, Identifiable {
     }
     var symbol: String {
         switch self {
-        case .page: return "doc.viewfinder"
+        case .page, .resize, .rotate, .deskew, .crop, .layout: return "doc.viewfinder"
         case .tone: return "circle.lefthalf.filled"
         case .sharpen: return "triangle"
         case .blur: return "drop"
@@ -50,6 +55,12 @@ struct Stage: Codable, Equatable, Identifiable {
         case .despeckle: return "最大黑点直径=\(s.despeckleDiameter)px, 黑色灰度阈值=\(s.despeckleThreshold), 清除连边黑区=\(yes(s.removeBorders))"
         case .mirror: return "水平镜像=\(yes(s.flipHorizontal)), 上下翻转=\(yes(s.flipVertical))"
         case .invert: return "RGB=255−原值"
+        case .resize:
+            return "源X DPI=\(s.sourceDPI == 0 ? "自动／缺失300" : n(s.sourceDPI)), 源Y DPI=\(s.sourceDPIY == 0 ? "跟随X／自动" : n(s.sourceDPIY)), 保持物理尺寸=\(yes(s.preservePhysical)), 目标DPI=\(n(s.targetDPI)), 缩放=\(n(s.scale*100))%, 重采样=\(["最近邻", "双线性", "双三次"][s.resampleMethod])"
+        case .rotate: return "顺时针旋转=\(s.rotation*90)°"
+        case .deskew: return "自动=\(["关闭", "横排", "竖排"][s.deskew]), 范围±\(n(s.deskewLimit))°, 微调=\(n(s.angle))°, 边角填白"
+        case .crop: return "分页=\(["整页", "左页", "右页"][s.page]), L/R/T/B=\(n((s.crop+s.cropLeft)*100))/\(n((s.crop+s.cropRight)*100))/\(n((s.crop+s.cropTop)*100))/\(n((s.crop+s.cropBottom)*100))%, 内容框=\(yes(s.autoTrim)), 阈值=\(s.trimThreshold), 忽略直径=\(s.trimIgnore)px, 补偿=\(s.trimPadding)px, 清连边=\(yes(s.removeBorders)), 奇偶交换=\(yes(s.alternateMargins))"
+        case .layout: return "页面=\(["保持", "指定宽", "指定高", "指定宽高", "内容加边距"][s.pageMode]), W/H=\(n(s.pageWidth))/\(n(s.pageHeight))\(s.pageUnit == 0 ? "cm" : "px"), 边距L/R/T/B=\(n(s.marginLeft))/\(n(s.marginRight))/\(n(s.marginTop))/\(n(s.marginBottom)), 排布=\(["完整放入", "铺满裁切", "拉伸"][s.fitMode]), 对齐=\(s.alignX)/\(s.alignY), 奇偶交换=\(yes(s.alternateMargins)), 重采样=\(["最近邻", "双线性", "双三次"][s.resampleMethod])"
         case .page:
             return "分页=\(["整页", "左页", "右页"][s.page]), 旋转=\(s.rotation * 90)°, 纠斜=\(["关闭", "横排", "竖排"][s.deskew]), 范围±\(n(s.deskewLimit))°, 微调=\(n(s.angle))°, 裁边 L/R/T/B=\(n((s.cropLeft+s.crop)*100))/\(n((s.cropRight+s.crop)*100))/\(n((s.cropTop+s.crop)*100))/\(n((s.cropBottom+s.crop)*100))%, 自动内容框=\(yes(s.autoTrim)), 内容阈值=\(s.trimThreshold), 清连边=\(yes(s.removeBorders)), 忽略斑点=\(s.trimIgnore)px, 补偿=\(s.trimPadding)px, 源DPI=\(s.sourceDPI == 0 ? "自动／缺失时300" : n(s.sourceDPI)), 源Y DPI=\(s.sourceDPIY == 0 ? "跟随X或自动" : n(s.sourceDPIY)), 保持物理尺寸=\(yes(s.preservePhysical)), 目标DPI=\(n(s.targetDPI)), 缩放=\(n(s.scale*100))%, 页面=\(["原尺寸", "指定宽", "指定高", "指定宽高", "内容加边距"][s.pageMode]), W/H=\(n(s.pageWidth))/\(n(s.pageHeight))\(s.pageUnit == 0 ? "cm" : "px"), 边距 L/R/T/B=\(n(s.marginLeft))/\(n(s.marginRight))/\(n(s.marginTop))/\(n(s.marginBottom)), 排布=\(["等比完整", "等比铺满裁切", "拉伸校正宽高"][s.fitMode]), 对齐=\(s.alignX)/\(s.alignY), 奇偶镜像边距=\(yes(s.alternateMargins)), 重采样=\(["最近邻", "双线性", "双三次"][s.resampleMethod])"
         }
@@ -77,7 +88,7 @@ struct Recipe: Codable, Equatable {
         namePrefix + String(format:"%0*d",nameDigits,index) + (nameStyle == 0 ? "_"+page.exportStem : "") + "."+format
     }
     static let neutral = Recipe.standard()
-    static func standard() -> Recipe { Recipe(stages: [.page, .tone, .blur, .sharpen, .gray, .binary].map(Stage.init)) }
+    static func standard() -> Recipe { Recipe(stages: [.resize, .tone, .blur, .sharpen, .gray, .binary].map(Stage.init)) }
     func validated() throws -> Recipe {
         guard stages.count <= 64, Set(stages.map(\.id)).count == stages.count,
               ["png", "jpg", "tiff"].contains(format), quality.isFinite, (0.1...1).contains(quality), (0...1).contains(nameStyle), (4...8).contains(nameDigits),
@@ -89,7 +100,7 @@ struct Recipe: Codable, Equatable {
     }
     static func legacy(_ settings: Settings) throws -> Recipe {
         let s = try settings.validated()
-        var recipe = standard(); recipe.format = s.format; recipe.quality = s.quality
+        var recipe = Recipe(stages: [.page, .tone, .blur, .sharpen, .gray, .binary].map(Stage.init)); recipe.format = s.format; recipe.quality = s.quality
         for i in recipe.stages.indices { recipe.stages[i].settings = s; recipe.stages[i].settings.cleanup = 0 }
         if s.cleanup == 1 {
             var stage = Stage(.despeckle); stage.settings.despeckleDiameter = 1
@@ -107,7 +118,7 @@ struct Project: Codable {
         let set = Set(pages)
         guard version == 1, pages.count <= 100000, set.count == pages.count, recipes.count <= pages.count,
               Set(recipes.map(\.page)).count == recipes.count, recipes.allSatisfy({ set.contains($0.page) }),
-              pages.allSatisfy({ $0.url.isFileURL && (72...600).contains($0.dpi) && ($0.pdfPage == nil || $0.pdfPage! > 0) && ($0.embeddedIndex == nil || ($0.pdfPage != nil && $0.embeddedIndex! >= 0)) }) else {
+              pages.allSatisfy({ $0.url.isFileURL && (72...1200).contains($0.dpi) && ($0.pdfPage == nil || $0.pdfPage! > 0) && ($0.embeddedIndex == nil || ($0.pdfPage != nil && $0.embeddedIndex! >= 0)) }) else {
             throw ProcessingError.message("工程页面列表或版本无效。")
         }
         for row in recipes { _ = try row.recipe.validated() }

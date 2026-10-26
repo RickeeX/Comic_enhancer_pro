@@ -98,6 +98,7 @@ final class PaperScroll: NSScrollView {
     }
     func fit() {
         fitMode = true
+        guard !paper.pictures.isEmpty else { if magnification != 1 { magnification = 1 }; return }
         let size = contentView.frame.size, document = paper.frame.size
         guard size.width > 0, size.height > 0, document.width > 0, document.height > 0 else { return }
         let value = min(size.width/document.width, size.height/document.height)

@@ -87,7 +87,8 @@ enum Pipeline {
         var core = Settings()
         let ratio = min(Double(f.image.width)/Double(f.logicalWidth), Double(f.image.height)/Double(f.logicalHeight))
         switch stage.kind {
-        case .page: try geometry(s, frame: &f, preview: preview, pageIndex: pageIndex); return
+        case .page, .resize, .rotate, .deskew, .crop, .layout:
+            try geometry(pageSettings(stage), frame: &f, preview: preview, pageIndex: pageIndex); return
         case .tone:
             if s.brightness == 0 && s.contrast == 1 && s.gamma == 1 && s.whitePoint == 1 && !s.autoLevels { return }
             core.brightness = s.brightness; core.contrast = s.contrast; core.gamma = s.gamma; core.whitePoint = s.whitePoint; core.autoLevels = s.autoLevels
@@ -141,12 +142,34 @@ enum Pipeline {
         }
         f.image = try Processor.processCore(f.image, settings: core).enhanced
     }
+    private static func pageSettings(_ stage: Stage) -> Settings {
+        let s = stage.settings
+        if stage.kind == .page { return s }
+        var p = Settings()
+        switch stage.kind {
+        case .resize:
+            p.sourceDPI = s.sourceDPI; p.sourceDPIY = s.sourceDPIY; p.preservePhysical = s.preservePhysical
+            p.targetDPI = s.targetDPI; p.scale = s.scale; p.resampleMethod = s.resampleMethod
+        case .rotate: p.rotation = s.rotation
+        case .deskew: p.deskew = s.deskew; p.deskewLimit = s.deskewLimit; p.angle = s.angle
+        case .crop:
+            p.page = s.page; p.crop = s.crop; p.cropLeft = s.cropLeft; p.cropRight = s.cropRight; p.cropTop = s.cropTop; p.cropBottom = s.cropBottom
+            p.autoTrim = s.autoTrim; p.trimThreshold = s.trimThreshold; p.trimIgnore = s.trimIgnore; p.trimPadding = s.trimPadding
+            p.removeBorders = s.removeBorders; p.alternateMargins = s.alternateMargins
+        case .layout:
+            p.pageMode = s.pageMode; p.pageUnit = s.pageUnit; p.pageWidth = s.pageWidth; p.pageHeight = s.pageHeight
+            p.marginLeft = s.marginLeft; p.marginRight = s.marginRight; p.marginTop = s.marginTop; p.marginBottom = s.marginBottom
+            p.fitMode = s.fitMode; p.alignX = s.alignX; p.alignY = s.alignY; p.alternateMargins = s.alternateMargins; p.resampleMethod = s.resampleMethod
+        default: break
+        }
+        return p
+    }
     private static func crop(_ rect: CGRect, frame f: inout PipelineResult) throws {
         let bounded = rect.integral.intersection(CGRect(x: 0, y: 0, width: f.image.width, height: f.image.height))
         guard bounded.width >= 1, bounded.height >= 1, let image = f.image.cropping(to: bounded) else { throw ProcessingError.message("裁切区域为空。") }
         f.logicalWidth = max(1, Int((Double(f.logicalWidth)*Double(image.width)/Double(f.image.width)).rounded()))
         f.logicalHeight = max(1, Int((Double(f.logicalHeight)*Double(image.height)/Double(f.image.height)).rounded()))
-        f.image = image
+        f.image = try self.image(rgba(image),width:image.width,height:image.height)
     }
     private static func geometry(_ s: Settings, frame f: inout PipelineResult, preview: Bool, pageIndex: Int) throws {
         if s.sourceDPI > 0 { f.dpiX = s.sourceDPI; if s.sourceDPIY == 0 { f.dpiY = s.sourceDPI } }
@@ -170,7 +193,10 @@ enum Pipeline {
         }
         if s.autoTrim {
             var data = try rgba(f.image)
-            if s.removeBorders { _ = data.withUnsafeMutableBufferPointer { ce_despeckle($0.baseAddress, UInt32(f.image.width), UInt32(f.image.height), 0, Int32(s.trimThreshold), 1) } }
+            if s.removeBorders {
+                let cleared = data.withUnsafeMutableBufferPointer { ce_despeckle($0.baseAddress, UInt32(f.image.width), UInt32(f.image.height), 0, Int32(s.trimThreshold), 1) }
+                guard cleared == 0 else { throw ProcessingError.message("连边黑区清除失败。") }
+            }
             var bounds = [UInt32](repeating: 0, count: 4)
             let ratio = Double(f.image.width)/Double(f.logicalWidth)
             let ignore = s.trimIgnore == 0 ? 0 : max(1, Int((Double(s.trimIgnore)*ratio).rounded()))

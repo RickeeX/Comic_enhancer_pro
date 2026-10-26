@@ -162,7 +162,7 @@ struct IntegrationTests {
         for i in stride(from: 0, to: binaryPixels.count, by: 4) { precondition(binaryPixels[i] == 0 || binaryPixels[i] == 255) }
         let binaryThenBlur = try Pipeline.render(PageItem(url: source), recipe: Recipe(stages: [binaryStage, blur]), preview: false)
         precondition(binaryThenBlur.grayLevels == 0, "Postbinary filtering was incorrectly labeled bilevel")
-        var pageStage = Stage(.page); pageStage.settings.sourceDPI = 300; pageStage.settings.preservePhysical = true; pageStage.settings.targetDPI = 800
+        var pageStage = Stage(.resize); pageStage.settings.sourceDPI = 300; pageStage.settings.preservePhysical = true; pageStage.settings.targetDPI = 800
         var highDPIRecipe = Recipe(stages: [pageStage, blur, sharpen, binaryStage])
         let highDPI = try Pipeline.render(PageItem(url: source), recipe: highDPIRecipe, preview: false)
         precondition(highDPI.image.width == 320 && highDPI.image.height == 213)
@@ -177,7 +177,7 @@ struct IntegrationTests {
         }
         let pdfInfo = try Pipeline.sourceInfo(extracted[0])
         precondition(abs((pdfInfo.dpiX ?? 0)-3.6) < 0.01 && abs((pdfInfo.dpiY ?? 0)-3.6) < 0.01, "Embedded PDF physical placement ignored")
-        var pdfDPI = Stage(.page); pdfDPI.settings.preservePhysical = true; pdfDPI.settings.targetDPI = 72
+        var pdfDPI = Stage(.resize); pdfDPI.settings.preservePhysical = true; pdfDPI.settings.targetDPI = 72
         let physicalPDF = try Pipeline.render(extracted[0], recipe: Recipe(stages: [pdfDPI]), preview: false)
         precondition(physicalPDF.logicalWidth == 80 && physicalPDF.logicalHeight == 40)
         let anisotropicInfo = try Pipeline.sourceInfo(jpegItems[0])
@@ -203,6 +203,18 @@ struct IntegrationTests {
             precondition(bytes[(150*200+5)*4] == 255 && bytes[(15*200+100)*4] == 255, "Fill/crop destroyed page margins")
         }
         precondition(layouts[0] != layouts[1] && layouts[1] != layouts[2], "Layout fit/fill/stretch modes ignored")
+        var layoutCM = Stage(.layout); layoutCM.settings.pageMode = 3;layoutCM.settings.pageWidth = 2.54;layoutCM.settings.pageHeight = 5.08
+        var resizeCM = pageStage;resizeCM.settings.targetDPI = 600
+        let cmPage = try Pipeline.render(PageItem(url:source),recipe:Recipe(stages:[resizeCM,layoutCM]),preview:false)
+        precondition(cmPage.logicalWidth == 600 && cmPage.logicalHeight == 1200 && cmPage.dpiX == 600,"Centimeter layout conversion is wrong")
+        var cropStep = Stage(.crop);cropStep.settings.cropLeft = 0.25
+        let cropPage = try Pipeline.render(PageItem(url:source),recipe:Recipe(stages:[cropStep]),preview:false)
+        let uncropped = try Pipeline.rgba(Processor.sourceImage(PageItem(url:source),preview:false))
+        let cropped = cropPage.image.dataProvider!.data! as Data
+        precondition(cropPage.image.width == 90 && abs(Int(cropped[30*90*4])-Int(uncropped[(30*120+30)*4])) <= 1,"Cropped image provider offset is wrong")
+        var rotateStep = Stage(.rotate);rotateStep.settings.rotation = 1
+        let rotatedPage = try Pipeline.render(PageItem(url:source),recipe:Recipe(stages:[rotateStep]),preview:false)
+        precondition(rotatedPage.logicalWidth == 80 && rotatedPage.logicalHeight == 120)
         let pageA = PageItem(url: source), pageB = PageItem(url: jpegURL), pageC = PageItem(url: bad)
         var book = RecipeBook(); var a = book.recipe(for: pageA); a.stages[1].settings.brightness = 0.2; book.values[pageA] = a
         precondition(book.recipe(for: pageB).stages[1].settings.brightness == 0, "Default pages share settings")
