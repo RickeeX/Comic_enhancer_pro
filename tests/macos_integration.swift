@@ -310,6 +310,21 @@ struct IntegrationTests {
         let monoDecoded=try Processor.render(monoURL,settings:Settings(),preview:false).enhanced
         let monoDisplayPixels=try Pipeline.rgba(monoResult.image),monoDecodedPixels=try Pipeline.rgba(monoDecoded)
         precondition(Data(monoDisplayPixels) == Data(monoDecodedPixels),"Gray8 display/export pixels differ")
+        let batchFolder=folder.appendingPathComponent("batch")
+        try FileManager.default.createDirectory(at:batchFolder,withIntermediateDirectories:false)
+        let batchPages=[PageItem(url:monoSource),PageItem(url:source),PageItem(url:monoSource)]
+        let batchPlans=[monoRecipe,Recipe.neutral,monoRecipe]
+        let batch=BatchExporter.run(pages:batchPages,recipes:batchPlans,indices:[0,1,2],folder:batchFolder,cancelled:{false},progress:{_ in},workers:2)
+        precondition(batch.succeeded==3 && batch.failed==0 && batch.completed==3,"Bounded parallel export lost a page")
+        for i in batchPages.indices {
+            let url=batchFolder.appendingPathComponent(batchPlans[i].filename(index:i,page:batchPages[i]))
+            precondition(FileManager.default.fileExists(atPath:url.path),"Parallel export filename mismatch")
+        }
+        let duplicates=BatchExporter.run(pages:[batchPages[0],batchPages[0]],recipes:[monoRecipe,monoRecipe],indices:[4,4],folder:batchFolder,cancelled:{false},progress:{_ in},workers:2)
+        precondition(duplicates.succeeded==1 && duplicates.failed==1,"Concurrent duplicate names overwrote output")
+        let stopped=BatchExporter.run(pages:batchPages,recipes:batchPlans,indices:[10,11,12],folder:batchFolder,cancelled:{true},progress:{_ in},workers:2)
+        precondition(stopped.completed==0,"Cancelled batch started processing pages")
+        precondition(BatchExporter.workerCount(pages:batchPages,recipes:batchPlans,memory:256_000_000,cpus:8)==1,"Memory budget allowed unsafe parallelism")
         let horizontal = try Pipeline.stitch(highDPI,highDPI,vertical:false,gap:5)
         let vertical = try Pipeline.stitch(highDPI,highDPI,vertical:true,gap:7)
         precondition(horizontal.image.width == 645 && horizontal.image.height == 213 && horizontal.grayLevels == 2)

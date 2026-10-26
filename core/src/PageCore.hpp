@@ -1,14 +1,14 @@
 // C entry points for page geometry and topology-aware binary postprocessing.
 namespace {
 bool pageSize(uint32_t w,uint32_t h){return w&&h&&w<=50000&&h<=50000&&uint64_t(w)*h<=maxPixels;}
-struct Component { uint32_t left,right,top,bottom; std::vector<uint32_t> small; };
+struct InkComponent { uint32_t left,right,top,bottom; std::vector<uint32_t> small; };
 template<int C,class F> void components(const uint8_t *rgba,uint32_t w,uint32_t h,int threshold,int diameter,F visit){
     size_t n=size_t(w)*h;std::vector<uint8_t> seen((n+7)/8);std::vector<uint32_t> stack;
     auto marked=[&](size_t i){return (seen[i>>3]>>(i&7))&1;};
     auto push=[&](uint32_t i){seen[i>>3]|=uint8_t(1u<<(i&7));stack.push_back(i);};
     for(uint32_t start=0;start<n;++start){
         if(marked(start)||(C==1?rgba[size_t(start)]:luminance(rgba+size_t(start)*C))>threshold)continue;
-        Component c{start%w,start%w,start/w,start/w,{}};bool small=true;push(start);
+        InkComponent c{start%w,start%w,start/w,start/w,{}};bool small=true;push(start);
         while(!stack.empty()){
             uint32_t i=stack.back();stack.pop_back();uint32_t x=i%w,y=i/w;
             c.left=std::min(c.left,x);c.right=std::max(c.right,x);c.top=std::min(c.top,y);c.bottom=std::max(c.bottom,y);
@@ -51,7 +51,7 @@ template<int C> int canvas(const uint8_t*src,uint32_t w,uint32_t h,uint32_t ow,u
             // Reuse them on enlargement: 4+4 taps instead of a 4x4 kernel.
             std::array<std::vector<float>,4> cache;
             std::array<int,4> keys{{-1,-1,-1,-1}};
-            if(method)for(int i=0;i<taps;++i)cache[i].resize(size_t(ow)*3);
+            if(method)for(int i=0;i<taps;++i)cache[i].resize(size_t(ow)*(C==1?1:3));
             for(uint32_t y=a;y<b;++y){
                 const auto &sy=ys[y];auto line=dst+size_t(y)*ow*C;
                 if(!sy.inside){std::fill_n(line,size_t(ow)*C,255);continue;}
@@ -63,7 +63,7 @@ template<int C> int canvas(const uint8_t*src,uint32_t w,uint32_t h,uint32_t ow,u
                         for(uint32_t x=0;x<ow;++x){const auto &sx=xs[x];if(!sx.inside)continue;
                             for(int c=0;c<(C==1?1:3);++c){float value=0;
                                 for(int xx=0;xx<taps;++xx)value+=in[size_t(sx.index[xx])*C+c]*sx.weight[xx];
-                                target[size_t(x)*3+c]=value;}
+                                target[size_t(x)*(C==1?1:3)+c]=value;}
                         }keys[slot]=iy;
                     }filtered[yy]=cache[slot].data();
                 }
@@ -71,7 +71,7 @@ template<int C> int canvas(const uint8_t*src,uint32_t w,uint32_t h,uint32_t ow,u
                     if(!sx.inside){std::fill_n(p,C,255);continue;}
                     if(!method){auto in=src+(size_t(sy.index[0])*w+sx.index[0])*C;std::copy_n(in,C==1?1:3,p);}
                     else for(int c=0;c<(C==1?1:3);++c){float value=0;
-                        for(int yy=0;yy<taps;++yy)value+=filtered[yy][size_t(x)*3+c]*sy.weight[yy];
+                        for(int yy=0;yy<taps;++yy)value+=filtered[yy][size_t(x)*(C==1?1:3)+c]*sy.weight[yy];
                         p[c]=byte(value);}
                     if constexpr(C==4)p[3]=255;
                 }
@@ -91,7 +91,7 @@ template<int C> int despeckle(uint8_t*rgba,uint32_t w,uint32_t h,int32_t diamete
                 for(int dy=-1;dy<=1;++dy)for(int dx=-1;dx<=1;++dx){int xx=x+dx,yy=y+dy;if(xx>=0&&yy>=0&&xx<int(w)&&yy<int(h))push(uint32_t(yy)*w+xx);}
             }
         }
-        if(diameter)components<C>(rgba,w,h,threshold,diameter,[&](const Component &c,bool small){
+        if(diameter)components<C>(rgba,w,h,threshold,diameter,[&](const InkComponent &c,bool small){
             if(small)for(auto i:c.small){auto p=rgba+size_t(i)*C;std::fill_n(p,C==1?1:3,255);}
         });return 0;
     }catch(...){return -4;}
@@ -109,7 +109,7 @@ template<int C> int contentBounds(const uint8_t*rgba,uint32_t w,uint32_t h,int32
                     l=std::min(l,x);r=std::max(r,x);t=std::min(t,y);bt=y;any=true;}
                 if(any){std::lock_guard<std::mutex> guard(merge);found=true;left=std::min(left,l);right=std::max(right,r);top=std::min(top,t);bottom=std::max(bottom,bt);}
             });
-        }else components<C>(rgba,w,h,threshold,diameter,[&](const Component &c,bool small){if(small)return;found=true;left=std::min(left,c.left);top=std::min(top,c.top);right=std::max(right,c.right);bottom=std::max(bottom,c.bottom);});
+        }else components<C>(rgba,w,h,threshold,diameter,[&](const InkComponent &c,bool small){if(small)return;found=true;left=std::min(left,c.left);top=std::min(top,c.top);right=std::max(right,c.right);bottom=std::max(bottom,c.bottom);});
         out[0]=found?left:0;out[1]=found?top:0;out[2]=found?right-left+1:w;out[3]=found?bottom-top+1:h;return 0;
     }catch(...){return -4;}
 }

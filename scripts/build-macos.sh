@@ -16,7 +16,7 @@ for ARCH in arm64 x86_64; do
     -I core/include -c core/src/ComicCore.cpp -o "$BUILD/core-$ARCH.o"
   xcrun swiftc -swift-version 5 -O -whole-module-optimization -parse-as-library \
     -target "$TARGET" -sdk "$SDK" -import-objc-header core/include/ComicCore.h \
-    macos/PageItem.swift macos/PDFLoader.swift macos/Settings.swift macos/Recipe.swift macos/Processor.swift macos/GrayPlane.swift macos/Pipeline.swift macos/Model.swift macos/PreviewCanvas.swift macos/App.swift \
+    macos/PageItem.swift macos/PDFLoader.swift macos/Settings.swift macos/Recipe.swift macos/Processor.swift macos/GrayPlane.swift macos/Pipeline.swift macos/BatchExporter.swift macos/Model.swift macos/PreviewCanvas.swift macos/App.swift \
     "$BUILD/core-$ARCH.o" -lc++ -framework SwiftUI -framework AppKit \
     -framework Accelerate -framework CoreGraphics -framework ImageIO -framework UniformTypeIdentifiers -o "$BUILD/ComicEnhancer-$ARCH"
 done

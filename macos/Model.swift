@@ -298,22 +298,10 @@ final class Model: ObservableObject {
         let project = Project(pages: files, recipes: files.compactMap { page in book.values[page].map { Project.PageRecipe(page: page, recipe: $0) } })
         let cancel = Cancellation(); cancellation = cancel; busy = true; completed = 0; total = inputs.count; status = "正在按逐页设置导出…"
         queue.async {
-            var succeeded = 0, failed = 0, processed = 0, log = "Comic Enhancer operation-stack export\n"
-            for (index, page) in inputs.enumerated() {
-                if cancel.isCancelled { break }
-                autoreleasepool {
-                    do {
-                        let config = plans[index]
-                        let name = config.filename(index:indices[index],page:page)
-                        let destination = folder.appendingPathComponent(name)
-                        guard !FileManager.default.fileExists(atPath:destination.path) else { throw ProcessingError.message("输出名称冲突："+name) }
-                        let value = try Pipeline.render(page, recipe: config, preview: false, pageIndex: indices[index])
-                        try Pipeline.write(value, to: destination, recipe: config)
-                        succeeded += 1; log += "OK\t\(page.path)\t\(name)\t\(value.description)\n"
-                    } catch { failed += 1; log += "ERROR\t\(page.path)\t\(error.localizedDescription)\n" }
-                }
-                processed += 1; let count = processed; DispatchQueue.main.async { self.completed = count }
-            }
+            let report=BatchExporter.run(pages:inputs,recipes:plans,indices:indices,folder:folder,cancelled:{cancel.isCancelled},progress:{ count in
+                DispatchQueue.main.async { self.completed=max(self.completed,count) }
+            })
+            let succeeded=report.succeeded,failed=report.failed,processed=report.completed,log=report.log
             var recordError = ""
             do { try log.write(to: folder.appendingPathComponent("export.log"), atomically: true, encoding: .utf8); try JSONEncoder().encode(project).write(to: folder.appendingPathComponent("project.json"), options: .atomic) }
             catch { recordError = "；工程／日志写入失败：\(error.localizedDescription)" }
@@ -364,5 +352,5 @@ final class Model: ObservableObject {
             }
         }
     }
-    func cancel() { cancellation.cancel(); status = "将在当前页完成后停止…" }
+    func cancel() { cancellation.cancel(); status = "正在停止处理…" }
 }
