@@ -27,6 +27,7 @@ struct PipelineResult {
     var description: String { String(format: "%d×%d px · %.1f×%.1f DPI · %.2f×%.2f cm", logicalWidth, logicalHeight, dpiX, dpiY, Double(logicalWidth)/dpiX*2.54, Double(logicalHeight)/dpiY*2.54) }
 }
 enum Pipeline {
+    private static let traceEnabled=ProcessInfo.processInfo.environment["COMIC_TRACE_BATCH"] == "1"
     private final class InfoBox { let info: SourceInfo; init(_ info: SourceInfo) { self.info = info } }
     private static let metadata: NSCache<NSString, InfoBox> = { let c = NSCache<NSString, InfoBox>(); c.countLimit = 256; return c }()
     static func sourceInfo(_ item: PageItem) throws -> SourceInfo {
@@ -90,6 +91,7 @@ enum Pipeline {
         while index<stages.count {
             if cancelled() { throw CancellationError() }
             let stage=stages[index]
+            if traceEnabled { print("[Pipeline] begin \(stage.kind.rawValue)");fflush(stdout) }
             if let gray=f.gray,gray.width*gray.height>=4_000_000,index+1<stages.count,stage.kind == .blur,stages[index+1].kind == .sharpen,
                stage.settings.blur>0,stage.settings.blurMethod==0,stages[index+1].settings.sharpen>0,stages[index+1].settings.sharpenMethod==0,
                let metal=MetalFilters.shared {
@@ -103,6 +105,7 @@ enum Pipeline {
                 }
             }
             try autoreleasepool { try apply(stage,to:&f,preview:preview,pageIndex:pageIndex,workspace:workspace) }
+            if traceEnabled { print("[Pipeline] end \(stage.kind.rawValue)");fflush(stdout) }
             index += 1
         }
         if cancelled() { throw CancellationError() }

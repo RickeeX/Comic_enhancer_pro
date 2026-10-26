@@ -10,6 +10,8 @@ struct BatchReport {
     var log:String { "Comic Enhancer operation-stack export; workers=\(workers)\n" + entries.compactMap{$0?.message}.joined() }
 }
 enum BatchExporter {
+    private static let traceEnabled=ProcessInfo.processInfo.environment["COMIC_TRACE_BATCH"] == "1"
+    private static func trace(_ message:String) { if traceEnabled { print("[Batch] "+message);fflush(stdout) } }
     // A deliberately conservative bound on RGBA fallbacks and filter scratch.
     // Complex legacy/layout stacks get the full 100 MP bound and stay serial.
     static func estimatedBytes(_ page:PageItem,recipe:Recipe) -> UInt64 {
@@ -60,9 +62,13 @@ enum BatchExporter {
                         if cancelled() { throw CancellationError() }
                         let destination=folder.appendingPathComponent(name)
                         guard !duplicates.contains(index),!FileManager.default.fileExists(atPath:destination.path) else { throw ProcessingError.message("输出名称冲突："+name) }
+                        trace("page \(index) begin render")
                         let value=try Pipeline.render(page,recipe:config,preview:false,pageIndex:indices[index],cancelled:cancelled,materialize:false,grayWorkspace:workspace)
+                        trace("page \(index) end render")
                         if cancelled() { throw CancellationError() }
+                        trace("page \(index) begin encode")
                         try Pipeline.write(value,to:destination,recipe:config)
+                        trace("page \(index) end encode")
                         return BatchReport.Entry(success:true,message:"OK\t\(page.path)\t\(name)\t\(value.description)\n")
                     } catch is CancellationError { return nil }
                     catch { return BatchReport.Entry(success:false,message:"ERROR\t\(page.path)\t\(error.localizedDescription)\n") }

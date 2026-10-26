@@ -103,7 +103,7 @@ jobs:
         run: |
           set -euo pipefail
           set +e
-          .build/macos-tests --benchmark-batch 2>&1 | tee .build/batch-performance.log
+          COMIC_TRACE_BATCH=1 .build/macos-tests --benchmark-batch 2>&1 | tee .build/batch-performance.log
           batch_status=${PIPESTATUS[0]}
           echo "$batch_status" > .build/batch-exit.txt
           if [[ "$batch_status" != 0 ]]; then exit "$batch_status"; fi
@@ -119,7 +119,7 @@ jobs:
         run: |
           set -euo pipefail
           COMIC_SANITIZE=1 ./scripts/test-macos.sh 2>&1 | tee .build/swift-asan.log
-          .build/macos-tests --benchmark-batch 2>&1 | tee .build/batch-asan.log
+          COMIC_TRACE_BATCH=1 .build/macos-tests --benchmark-batch 2>&1 | tee .build/batch-asan.log
       - name: Universal app build
         shell: bash
         run: |
@@ -131,7 +131,8 @@ jobs:
         run: |
           if [[ -f .build/batch-exit.txt ]] && [[ "$(cat .build/batch-exit.txt)" != 0 ]]; then
             python3 - <<'PYCODE'
-          import subprocess
+          import subprocess,os
+          os.environ['COMIC_TRACE_BATCH']='1'
           from pathlib import Path
           try:
               result=subprocess.run(['lldb','--batch','-o','run','-k','thread backtrace all','--','.build/macos-tests','--benchmark-batch'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=150)
