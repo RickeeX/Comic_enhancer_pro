@@ -93,9 +93,11 @@ struct IntegrationTests {
             for trial in -1..<3 {
                 let folder=root.appendingPathComponent("out-\(workers)-\(trial)")
                 try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:false)
+                print("Batch begin workers=\(workers) trial=\(trial)")
                 let start=Date(),report=BatchExporter.run(pages:pages,recipes:plans,indices:[0,1,2,3],folder:folder,cancelled:{false},progress:{_ in},workers:workers)
                 let ms=Date().timeIntervalSince(start)*1000
                 guard report.succeeded==4 && report.failed==0 else { throw ProcessingError.message(report.log) }
+                print("Batch complete workers=\(workers) trial=\(trial) ms=\(ms)")
                 if trial>=0 { samples.append(ms) }
             }
             print(String(format:"Four 17.78 MP pages native export, workers=%d: %.1f ms total",workers,samples.reduce(0,+)/Double(samples.count)))
@@ -103,7 +105,7 @@ struct IntegrationTests {
     }
     static func main() throws {
         if CommandLine.arguments.contains("--benchmark") { try benchmark();return }
-        if CommandLine.arguments.contains("--benchmark-batch") { try batchBenchmark();return }
+        if CommandLine.arguments.contains("--benchmark-batch") { setbuf(stdout,nil);try batchBenchmark();return }
 
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
