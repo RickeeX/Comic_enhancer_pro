@@ -73,10 +73,10 @@ final class Model: ObservableObject {
         let target = max(0, base + delta * (doublePreview ? 2 : 1))
         if files.indices.contains(target) { selection = files[target] }
     }
-    private func renderedPreview(_ page: PageItem, recipe: Recipe, preview: Bool, index: Int) throws -> PipelineResult {
+    private func renderedPreview(_ page: PageItem, recipe: Recipe, preview: Bool, index: Int, cancellation: Cancellation) throws -> PipelineResult {
         let date = (try? page.url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
         if let entry = previewCache[page], entry.recipe.stages == recipe.stages, entry.preview == preview, entry.index == index, entry.date == date { return entry.value }
-        let value = try Pipeline.render(page, recipe: recipe, preview: preview, pageIndex: index)
+        let value = try Pipeline.render(page, recipe: recipe, preview: preview, pageIndex: index, cancelled: { cancellation.isCancelled })
         previewCache[page] = PreviewEntry(recipe: recipe, preview: preview, index: index, date: date, value: value)
         return value
     }
@@ -216,9 +216,9 @@ final class Model: ObservableObject {
         let work = DispatchWorkItem {
             guard !cancel.isCancelled else { return }
             self.previewCache = self.previewCache.filter { $0.key == page || $0.key == next }
-            let result = Result { try autoreleasepool { try self.renderedPreview(page, recipe: firstRecipe, preview: previewMode, index: firstIndex) } }
+            let result = Result { try autoreleasepool { try self.renderedPreview(page, recipe: firstRecipe, preview: previewMode, index: firstIndex, cancellation: cancel) } }
             guard !cancel.isCancelled else { return }
-            let second: Result<PipelineResult, Error>? = next.flatMap { item in nextRecipe.map { config in Result { try autoreleasepool { try self.renderedPreview(item, recipe: config, preview: previewMode, index: firstIndex+1) } } } }
+            let second: Result<PipelineResult, Error>? = next.flatMap { item in nextRecipe.map { config in Result { try autoreleasepool { try self.renderedPreview(item, recipe: config, preview: previewMode, index: firstIndex+1, cancellation: cancel) } } } }
             guard !cancel.isCancelled else { return }
             self.previewCache = self.previewCache.filter { $0.key == page || $0.key == next }
             DispatchQueue.main.async {

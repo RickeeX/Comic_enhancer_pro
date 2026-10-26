@@ -85,6 +85,13 @@ struct IntegrationTests {
         let image = ctx.makeImage()!
         let source = folder.appendingPathComponent("source.png")
         try Processor.write(image, to: source, settings: Settings())
+        var cancellationChecks=0
+        do {
+            _ = try Pipeline.render(PageItem(url:source),recipe:Recipe(stages:[Stage(.tone),Stage(.invert)]),preview:false,cancelled:{
+                cancellationChecks += 1;return cancellationChecks >= 3
+            })
+            fatalError("Cancelled preview completed the remaining stack")
+        } catch is CancellationError { precondition(cancellationChecks == 3) }
         let neutral = try Processor.render(source, settings: Settings(), preview: false)
         precondition(neutral.enhanced.width == 120 && neutral.enhanced.height == 80)
         let preview = try Processor.render(source, settings: Settings(), preview: true)

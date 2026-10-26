@@ -69,7 +69,8 @@ enum Pipeline {
     static func checkSize(_ w: Int, _ h: Int) throws {
         guard w > 0, h > 0, w <= 50000, h <= 50000, w <= 100_000_000 / h else { throw ProcessingError.message("输出超过 1 亿像素或单边 5 万像素，请降低 DPI 或页面尺寸。") }
     }
-    static func render(_ item: PageItem, recipe: Recipe, preview: Bool, pageIndex: Int = 0) throws -> PipelineResult {
+    static func render(_ item: PageItem, recipe: Recipe, preview: Bool, pageIndex: Int = 0, cancelled: () -> Bool = { false }) throws -> PipelineResult {
+        if cancelled() { throw CancellationError() }
         _ = try recipe.validated()
         let source = try sourceInfo(item)
         try checkSize(source.width, source.height)
@@ -78,8 +79,10 @@ enum Pipeline {
             dpiX: source.dpiX ?? 300, dpiY: source.dpiY ?? 300,
             grayLevels: original.colorSpace?.model == .monochrome ? (original.bitsPerComponent == 1 ? 2 : 0) : -1, source: source)
         for stage in recipe.stages where stage.enabled {
+            if cancelled() { throw CancellationError() }
             try autoreleasepool { try apply(stage, to: &f, preview: preview, pageIndex: pageIndex) }
         }
+        if cancelled() { throw CancellationError() }
         return f
     }
     private static func apply(_ stage: Stage, to f: inout PipelineResult, preview: Bool, pageIndex: Int) throws {
