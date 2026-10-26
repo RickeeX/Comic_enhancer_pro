@@ -114,7 +114,7 @@ jobs:
               print(f'::notice title=Bounded batch comparison::{line}')
           PYCODE
       - name: Swift and C buffer lifetime stress
-        if: matrix.os == 'macos-15'
+        if: ${{ !cancelled() && matrix.os == 'macos-15' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -134,10 +134,10 @@ jobs:
           import subprocess
           from pathlib import Path
           try:
-              result=subprocess.run(['lldb','--batch','-o','run','-o','thread backtrace all','--','.build/macos-tests','--benchmark-batch'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=150)
+              result=subprocess.run(['lldb','--batch','-o','run','-k','thread backtrace all','--','.build/macos-tests','--benchmark-batch'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,timeout=150)
               Path('.build/batch-backtrace.log').write_text(result.stdout)
               lines=result.stdout.splitlines()
-              positions=[i for i,line in enumerate(lines) if 'stop reason' in line or 'frame #0' in line]
+              positions=[i for i,line in enumerate(lines) if 'stop reason' in line or 'frame #0' in line or 'frame #10' in line or 'frame #20' in line]
               for i in positions[:12]:
                   chunk='\n'.join(lines[max(0,i-1):i+20])[:3000].replace('%','%25').replace('\n','%0A')
                   print(f'::error title=Native batch crash::{chunk}')
