@@ -102,8 +102,7 @@ struct InspectorView: View {
                         Adjustment(title: "对比度", value: $model.settings.contrast, range: 0...3)
                         Adjustment(title: "Gamma · 越大越暗", value: $model.settings.gamma, range: 0.2...3)
                         Adjustment(title: "纸张白点", value: $model.settings.whitePoint, range: 0.2...1)
-                        Adjustment(title: "锐化", value: $model.settings.sharpen, range: 0...2)
-                        Adjustment(title: "柔化", value: $model.settings.blur, range: 0...1)
+                        FilterControls()
                     }
                     Divider()
                     Toggle("灰度图像", isOn: $model.settings.grayscale)
@@ -111,6 +110,11 @@ struct InspectorView: View {
                         Text("连续色调").tag(0)
                         ForEach([2,4,8,16,32,64,128,256], id: \.self) { Text("\($0) 级").tag($0) }
                     }
+                    Picker("减色抖动", selection: $model.settings.dither) {
+                        Text("无").tag(0); Text("Bayer 有序抖动").tag(1); Text("Floyd–Steinberg").tag(2)
+                    }.disabled(model.settings.binarization != 0 || model.settings.levels == 0)
+                    BinarizationControls()
+                    DeskewControls()
                     Divider()
                     Adjustment(title: "缩放比例", value: $model.settings.scale, range: 0.1...2)
                     Adjustment(title: "四边裁切比例", value: $model.settings.crop, range: 0...0.2)
@@ -149,5 +153,81 @@ struct Adjustment: View {
             HStack { Text(title); Spacer(); Text(value, format: .number.precision(.fractionLength(2))).monospacedDigit().foregroundStyle(.secondary) }
             Slider(value: $value, in: range)
         }.font(.callout)
+    }
+}
+
+struct FilterControls: View {
+    @EnvironmentObject var model: Model
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Divider()
+            Text("锐化与降噪").font(.headline)
+            Picker("模糊算法", selection: $model.settings.blurMethod) {
+                Text("高斯").tag(0); Text("均值 / Box").tag(1)
+                Text("中值 · 椒盐噪声").tag(2); Text("双边 · 保留边缘").tag(3)
+            }
+            Adjustment(title: "模糊强度", value: $model.settings.blur, range: 0...1)
+            Stepper("滤波半径：\(model.settings.filterRadius) px", value: $model.settings.filterRadius, in: 1...3)
+            if model.settings.blurMethod == 3 {
+                Adjustment(title: "双边色差 σ", value: $model.settings.edgeSigma, range: 1...100)
+            }
+            Picker("锐化算法", selection: $model.settings.sharpenMethod) {
+                Text("USM 反遮罩").tag(0); Text("Laplacian 拉普拉斯").tag(1)
+            }
+            Adjustment(title: "锐化强度", value: $model.settings.sharpen, range: 0...2)
+            Adjustment(title: "锐化阈值 · 保护噪声", value: $model.settings.sharpenThreshold, range: 0...64)
+        }
+    }
+}
+struct BinarizationControls: View {
+    @EnvironmentObject var model: Model
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Divider()
+            Text("二值化与去毛边").font(.headline)
+            Picker("算法", selection: $model.settings.binarization) {
+                Text("关闭 · 使用上方灰度减色").tag(0)
+                Text("固定阈值").tag(1); Text("Otsu 自动阈值").tag(2)
+                Text("Sauvola 局部自适应").tag(3)
+            }
+            if model.settings.binarization == 1 {
+                Adjustment(title: "黑白阈值", value: $model.settings.threshold, range: 0...255)
+            }
+            if model.settings.binarization == 3 {
+                Stepper("局部窗口半径：\(model.settings.adaptiveRadius) px", value: $model.settings.adaptiveRadius, in: 1...100)
+                Adjustment(title: "Sauvola k · 越大去背景越强", value: $model.settings.sauvolaK, range: 0...1)
+            }
+            if model.settings.binarization != 0 {
+                Picker("去毛边", selection: $model.settings.cleanup) {
+                    Text("关闭 · 保留细笔画").tag(0); Text("仅去孤立黑点").tag(1)
+                    Text("多数投票平滑").tag(2); Text("开运算 · 去黑色毛刺").tag(3)
+                    Text("闭运算 · 填白色缺口").tag(4)
+                }
+                if model.settings.cleanup != 0 {
+                    Stepper("清理次数：\(model.settings.cleanupPasses)", value: $model.settings.cleanupPasses, in: 1...3)
+                }
+                Text("输出为纯黑白；强去毛边可能损失细笔画。推荐使用 PNG 或 TIFF 保持二值结果。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+struct DeskewControls: View {
+    @EnvironmentObject var model: Model
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Divider()
+            Text("书页水平矫正").font(.headline)
+            Picker("自动纠斜", selection: $model.settings.deskew) {
+                Text("关闭").tag(0); Text("横排文字 / 水平基线").tag(1)
+                Text("竖排文字 / 垂直列线").tag(2)
+            }
+            if model.settings.deskew != 0 {
+                Adjustment(title: "自动搜索范围 ±°", value: $model.settings.deskewLimit, range: 1...10)
+            }
+            Adjustment(title: "手动微调 · 顺时针 °", value: $model.settings.angle, range: -15...15)
+            Text("支持横版和竖版画布。空白或低置信页面不自动旋转；保持画布大小，边角填白，边缘内容可能被裁切。")
+                .font(.caption).foregroundStyle(.secondary)
+        }
     }
 }

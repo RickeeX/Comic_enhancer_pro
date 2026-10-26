@@ -24,6 +24,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: ./scripts/test-core.sh
+      - name: Representative processing benchmark
+        shell: bash
+        run: |
+          set -o pipefail
+          .build/core-tests --benchmark | tee .build/benchmark.log
+          { echo '### CPU processing benchmark'; echo '```text'; cat .build/benchmark.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - name: Native codec integration tests
         shell: bash
         run: |

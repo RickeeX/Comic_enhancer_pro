@@ -13,6 +13,76 @@ std::vector<uint8_t> run(const std::vector<uint8_t>&s,uint32_t w,uint32_t h,CEOp
  uint32_t x=0,y=0;check(ce_dimensions(w,h,&o,&x,&y)==0,"dimensions");
  std::vector<uint8_t> out(size_t(x)*y*4);check(ce_process(s.data(),w,h,&o,out.data(),out.size())==0,"process");return out;
 }
+
+void advancedTests(){
+ auto o=ce_defaults();
+ auto rgba=[](const std::vector<uint8_t>&gray){std::vector<uint8_t> out(gray.size()*4,255);for(size_t i=0;i<gray.size();++i)out[i*4]=out[i*4+1]=out[i*4+2]=gray[i];return out;};
+ std::vector<uint8_t> ramp(256);for(int i=0;i<256;++i)ramp[i]=i;
+ o.binarization=1;o.threshold=100;auto result=run(rgba(ramp),256,1,o);
+ for(int i=0;i<256;++i)check(result[i*4]==(i<=100?0:255),"fixed threshold exact");
+ o.binarization=2;std::vector<uint8_t> two(200,220);std::fill(two.begin(),two.begin()+100,30);
+ result=run(rgba(two),20,10,o);for(int i=0;i<200;++i)check(result[i*4]==(i<100?0:255),"Otsu separates bimodal values");
+ result=run(rgba(std::vector<uint8_t>(400,200)),20,20,o);check(result[0]==255,"uniform Otsu blank stays white");
+ // Compare rolling-window Sauvola against an independent brute-force reference.
+ std::vector<uint8_t> shadow(37*29);for(int y=0;y<29;++y)for(int x=0;x<37;++x)shadow[y*37+x]=uint8_t(80+x*4-((x%7<2&&y%8<5)?65:0));
+ for(int radius:{1,4,100}){
+   o=ce_defaults();o.binarization=3;o.adaptive_radius=radius;o.sauvola_k=.25f;
+   result=run(rgba(shadow),37,29,o);
+   for(int y=0;y<29;++y)for(int x=0;x<37;++x){double sum=0,sq=0,n=0;
+     for(int yy=std::max(0,y-radius);yy<=std::min(28,y+radius);++yy)for(int xx=std::max(0,x-radius);xx<=std::min(36,x+radius);++xx){double v=shadow[yy*37+xx];sum+=v;sq+=v*v;++n;}
+     double mean=sum/n,t=mean*(1+.25*(std::sqrt(std::max(0.,sq/n-mean*mean))/128-1));
+     check(result[(y*37+x)*4]==(shadow[y*37+x]<=t?0:255),"Sauvola matches brute force at edges");
+   }
+ }
+ std::vector<uint8_t> noise(15*15,255);noise[7*15+7]=0;
+ o=ce_defaults();o.binarization=1;o.cleanup=1;result=run(rgba(noise),15,15,o);check(result[(7*15+7)*4]==255,"isolated ink removed");
+ noise[7*15+8]=0;result=run(rgba(noise),15,15,o);check(result[(7*15+7)*4]==0,"connected thin pair preserved");
+ std::fill(noise.begin(),noise.end(),255);
+ for(int y=5;y<=9;++y)for(int x=5;x<=9;++x)noise[y*15+x]=0;
+ noise[4*15+7]=0;o.cleanup=3;result=run(rgba(noise),15,15,o);
+ check(result[(4*15+7)*4]==255&&result[(7*15+7)*4]==0,"opening removes protrusion preserving core");
+ noise[4*15+7]=255;noise[7*15+7]=255;o.cleanup=4;result=run(rgba(noise),15,15,o);check(result[(7*15+7)*4]==0,"closing repairs hole");
+ o.cleanup=2;noise.assign(225,255);noise[7*15+7]=0;result=run(rgba(noise),15,15,o);check(result[(7*15+7)*4]==255,"majority clears isolated dot");
+ o=ce_defaults();o.blur=1;o.blur_method=2;result=run(rgba(noise),15,15,o);check(result[(7*15+7)*4]==255,"median removes salt-and-pepper noise");
+ std::vector<uint8_t> edge(32*16);for(int y=0;y<16;++y)for(int x=0;x<32;++x)edge[y*32+x]=x<16?20:230;
+ o.blur_method=3;o.edge_sigma=10;o.filter_radius=3;result=run(rgba(edge),32,16,o);
+ check(result[(8*32+15)*4]==20&&result[(8*32+16)*4]==230,"bilateral preserves strong edge");
+ o.blur_method=1;o.filter_radius=1;result=run(rgba(edge),32,16,o);check(result[(8*32+15)*4]==90,"box filter known edge mean");
+ o=ce_defaults();o.sharpen=1;o.sharpen_method=1;result=run(rgba(edge),32,16,o);check(result[(8*32+15)*4]==0&&result[(8*32+16)*4]==255,"Laplacian enhances edge");
+ o.sharpen_threshold=255;check(run(rgba(edge),32,16,o)==rgba(edge),"sharpen threshold protects weak edges");
+ for(int dither:{0,1,2}){o=ce_defaults();o.levels=4;o.dither=dither;result=run(rgba(ramp),16,16,o);
+   for(size_t i=0;i<result.size();i+=4)check(result[i]%85==0,"dither stays on quantization grid");}
+ o=ce_defaults();o.levels=2;o.dither=2;auto mid=run(rgba(std::vector<uint8_t>(128*128,128)),128,128,o);
+ int whites=0;for(size_t i=0;i<mid.size();i+=4)whites+=mid[i]==255;
+ check(std::abs(whites/16384.-128/255.)<.02,"error diffusion preserves average tone");
+ // Both canvas orientations and both text layouts; clockwise input needs negative correction.
+ for(bool vertical:{false,true})for(bool landscape:{false,true})for(float angle:{-3.25f,0.f,3.25f}){
+   int w=landscape?600:400,h=landscape?400:600;std::vector<uint8_t> page(w*h,255);
+   for(int y=50;y<h-50;++y)for(int x=50;x<w-50;++x){
+     bool ink=vertical?((x-50)%28<5&&(y-50)%13<8):((y-50)%28<5&&(x-50)%13<8);
+     if(ink)page[y*w+x]=20;
+   }
+   o=ce_defaults();o.angle=angle;auto tilted=run(rgba(page),w,h,o);float correction=0;
+   check(ce_estimate_skew(tilted.data(),w,h,vertical,5,&correction)==0,"skew estimate success");
+   if(std::abs(correction+angle)>.22f)std::cerr<<"skew: "<<vertical<<","<<landscape<<","<<angle<<" => "<<correction<<"\n";
+   check(std::abs(correction+angle)<.22f,"horizontal and vertical skew accuracy");
+   o=ce_defaults();o.deskew=vertical?2:1;auto aligned=run(tilted,w,h,o);float residual=9;
+   check(ce_estimate_skew(aligned.data(),w,h,vertical,5,&residual)==0&&std::abs(residual)<.22f,"automatic correction removes skew");
+ }
+ auto blank=rgba(std::vector<uint8_t>(10000,255));float correction=9;
+ check(ce_estimate_skew(blank.data(),100,100,0,5,&correction)==0&&correction==0,"blank page not rotated");
+ // All expensive modes must remain deterministic across stripe boundaries.
+ std::vector<uint8_t> stripes(131*197);for(size_t i=0;i<stripes.size();++i)stripes[i]=(i*71)%256;
+ for(int method=0;method<4;++method){o=ce_defaults();o.blur=0.7f;o.blur_method=method;o.filter_radius=2;o.binarization=3;o.cleanup=2;
+   o.threads=1;auto a=run(rgba(stripes),131,197,o);o.threads=4;check(a==run(rgba(stripes),131,197,o),"advanced parallel determinism");}
+ uint32_t w,h;o=ce_defaults();o.filter_radius=4;check(ce_dimensions(1,1,&o,&w,&h)==-1,"invalid filter radius rejected");
+ o=ce_defaults();o.angle=std::numeric_limits<float>::infinity();check(ce_dimensions(1,1,&o,&w,&h)==-1,"infinite angle rejected");
+ // Tiny pages, oversized adaptive windows, and all cleanup/filter combinations must be safe.
+ for(int bw=1;bw<=2;++bw)for(int bh=1;bh<=2;++bh)for(int method=0;method<4;++method)for(int cleanup=0;cleanup<5;++cleanup){
+   o=ce_defaults();o.blur=1;o.blur_method=method;o.filter_radius=3;o.binarization=3;o.adaptive_radius=100;o.cleanup=cleanup;
+   auto tiny=run(rgba(std::vector<uint8_t>(bw*bh,180)),bw,bh,o);check(tiny.size()==size_t(bw*bh*4),"tiny image edge safety");
+ }
+}
 int main(int argc,char**argv){
  (void)argv;
  auto o=ce_defaults();std::vector<uint8_t> s;
@@ -63,11 +133,26 @@ int main(int argc,char**argv){
  impulse[(2*5+2)*4]=impulse[(2*5+2)*4+1]=impulse[(2*5+2)*4+2]=128;
  o=ce_defaults();o.blur=1;r=run(impulse,5,5,o);check(r[48]==32&&r[44]>0,"Gaussian blur kernel");
  o.blur=0;o.sharpen=1;r=run(impulse,5,5,o);check(r[48]==224,"unsharp mask kernel");
+ advancedTests();
  std::cout<<"PASS: "<<checks<<" checks\n";
  if(argc>1){
-   std::vector<uint8_t> big(3000*4000*4,180);o=ce_defaults();o.auto_levels=1;o.contrast=1.1f;o.sharpen=.4f;
+   std::vector<uint8_t> big(3000*4000*4,255);
+   for(int y=0;y<4000;++y)for(int x=0;x<3000;++x){
+     uint8_t value=uint8_t((x%19<3&&y%31<13?35:180)+(x*17+y*31)%35);
+     size_t i=(size_t(y)*3000+x)*4;big[i]=big[i+1]=big[i+2]=value;
+   }
+   o=ce_defaults();o.auto_levels=1;o.contrast=1.1f;o.sharpen=.4f;
    auto start=std::chrono::steady_clock::now();auto result=run(big,3000,4000,o);
    auto ms=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-start).count();
-   std::cout<<"12 MP tone+unsharp: "<<ms<<" ms (host CPU only; not a Mac benchmark), "<<result.size()<<" bytes\n";
+   std::cout<<"12 MP tone+unsharp: "<<ms<<" ms (current runner CPU; includes allocation, excludes codec/UI), "<<result.size()<<" bytes\n";
+   big.resize(1500*2000*4);
+   for(int mode=0;mode<6;++mode){o=ce_defaults();
+     if(mode<4){o.blur=1;o.blur_method=mode;o.filter_radius=2;}
+     else {o.binarization=mode==4?2:3;o.adaptive_radius=20;o.cleanup=1;}
+     auto begin=std::chrono::steady_clock::now();auto processed=run(big,1500,2000,o);
+     auto elapsed=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-begin).count();
+     std::cout<<"3 MP "<<std::vector<const char*>{"Gaussian","Box","Median","Bilateral","Otsu+cleanup","Sauvola+cleanup"}[mode]<<": "<<elapsed<<" ms\n";
+   }
+
  }
 }

@@ -71,13 +71,31 @@ enum Processor {
         }
         // Use an actual grayscale color space for gray exports, reducing storage.
         var export = image
-        if settings.grayscale || settings.levels > 0 {
-            if let context = CGContext(data: nil, width: image.width, height: image.height,
-                bitsPerComponent: 8, bytesPerRow: image.width,
-                space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue) {
-                context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
-                if let gray = context.makeImage() { export = gray }
+        if settings.grayscale || settings.levels > 0 || settings.binarization != 0 {
+            guard let raw = image.dataProvider?.data else { throw ProcessingError.message("无法读取灰度输出数据。") }
+            let binary = settings.binarization != 0 || settings.levels == 2
+            let bits = settings.format == "jpg" ? 8 : binary ? 1 : settings.levels == 4 ? 2 : settings.levels == 16 ? 4 : 8
+            let stride = (image.width * bits + 7) / 8
+            var packed = Data(repeating: 0, count: stride * image.height)
+            let source = CFDataGetBytePtr(raw)!
+            packed.withUnsafeMutableBytes { (bytes: UnsafeMutableRawBufferPointer) in
+                for y in 0..<image.height {
+                    for x in 0..<image.width {
+                        let value = Int(source[y * image.bytesPerRow + x * 4])
+                        let quantized = (value * ((1 << bits) - 1) + 127) / 255
+                        let bit = x * bits
+                        bytes[y * stride + bit / 8] |= UInt8(quantized << (8 - bits - bit % 8))
+                    }
+                }
             }
+            guard let provider = CGDataProvider(data: packed as CFData),
+                  let gray = CGImage(width: image.width, height: image.height, bitsPerComponent: bits,
+                    bitsPerPixel: bits, bytesPerRow: stride, space: CGColorSpaceCreateDeviceGray(),
+                    bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue), provider: provider,
+                    decode: nil, shouldInterpolate: false, intent: .defaultIntent) else {
+                throw ProcessingError.message("无法创建灰度输出。")
+            }
+            export = gray
         }
         CGImageDestinationAddImage(dest, export, [kCGImageDestinationLossyCompressionQuality: settings.quality] as CFDictionary)
         guard CGImageDestinationFinalize(dest) else { throw ProcessingError.message("编码图像失败。") }

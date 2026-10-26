@@ -5,6 +5,8 @@
 #include <thread>
 #include <vector>
 #include <new>
+#include <mutex>
+#include <exception>
 namespace {
 constexpr uint64_t maxPixels = 40000000;
 bool valid(const CEOptions &o) {
@@ -12,7 +14,14 @@ bool valid(const CEOptions &o) {
     return in(o.brightness,-1,1)&&in(o.contrast,0,3)&&in(o.gamma,.2f,3)&&
         in(o.white_point,.2f,1)&&in(o.sharpen,0,2)&&in(o.blur,0,1)&&
         in(o.scale,.1f,2)&&in(o.crop,0,.2f)&&o.rotation>=0&&o.rotation<=3&&
-        o.page>=0&&o.page<=2&&(o.levels==0||(o.levels>=2&&o.levels<=256))&&o.threads>=0&&o.threads<=64;
+        o.page>=0&&o.page<=2&&(o.levels==0||(o.levels>=2&&o.levels<=256))&&o.threads>=0&&o.threads<=64&&
+        o.binarization>=0&&o.binarization<=3&&in(o.threshold,0,255)&&
+        o.adaptive_radius>=1&&o.adaptive_radius<=100&&in(o.sauvola_k,0,1)&&
+        o.cleanup>=0&&o.cleanup<=4&&o.cleanup_passes>=1&&o.cleanup_passes<=3&&
+        o.dither>=0&&o.dither<=2&&o.blur_method>=0&&o.blur_method<=3&&
+        o.filter_radius>=1&&o.filter_radius<=3&&in(o.edge_sigma,1,100)&&
+        o.sharpen_method>=0&&o.sharpen_method<=1&&in(o.sharpen_threshold,0,255)&&
+        o.deskew>=0&&o.deskew<=2&&in(o.deskew_limit,1,10)&&in(o.angle,-15,15);
 }
 struct Geometry { uint32_t x,y,w,h,rw,rh,ow,oh; };
 Geometry geometry(uint32_t w,uint32_t h,const CEOptions&o) {
@@ -27,15 +36,22 @@ Geometry geometry(uint32_t w,uint32_t h,const CEOptions&o) {
 template<class F> void rows(uint32_t h,int requested,F f) {
     unsigned n=std::min<unsigned>(requested?requested:std::min(8u,std::max(1u,std::thread::hardware_concurrency())),std::max(1u,h/64));
     std::vector<std::thread> workers;
-    // Joining already-created threads also makes a thread-creation failure safe.
-    try { for(unsigned i=1;i<n;++i) workers.emplace_back([&,i]{f(h*i/n,h*(i+1)/n);}); }
+    std::mutex failureMutex;std::exception_ptr failure;
+    auto task=[&](uint32_t a,uint32_t b){
+        try{f(a,b);}catch(...){std::lock_guard<std::mutex> lock(failureMutex);if(!failure)failure=std::current_exception();}
+    };
+    try { for(unsigned i=1;i<n;++i) workers.emplace_back([&,i]{task(h*i/n,h*(i+1)/n);}); }
     catch (...) { for(auto&t:workers)t.join(); throw; }
-    f(0,h/n);for(auto&t:workers)t.join();
+    task(0,h/n);for(auto&t:workers)t.join();
+    if(failure)std::rethrow_exception(failure);
 }
 uint8_t byte(float v){return uint8_t(std::lround(std::clamp(v,0.f,255.f)));}
+#include "Advanced.hpp"
 }
 extern "C" CEOptions ce_defaults(void) {
-    CEOptions o{};o.contrast=1;o.gamma=1;o.white_point=1;o.scale=1;return o;
+    CEOptions o{};o.contrast=1;o.gamma=1;o.white_point=1;o.scale=1;o.threshold=127;o.adaptive_radius=20;
+    o.sauvola_k=.2f;o.cleanup_passes=1;o.filter_radius=1;o.edge_sigma=25;
+    o.deskew_limit=5;return o;
 }
 extern "C" int ce_dimensions(uint32_t w,uint32_t h,const CEOptions*o,uint32_t*ow,uint32_t*oh){
     if(!o||!ow||!oh||!valid(*o)||!w||!h||(o->page&&w<2))return -1;
@@ -82,28 +98,21 @@ extern "C" int ce_process(const uint8_t*src,uint32_t w,uint32_t h,const CEOption
                     float bot=sample(ix,iy+1,c)*(1-fx)+sample(ix+1,iy+1,c)*fx;
                     p[c]=lut[byte(top*(1-fy)+bot*fy)];
                 }
-                if(o->grayscale||o->levels){uint8_t v=(54*p[0]+183*p[1]+19*p[2]+128)>>8;p[0]=p[1]=p[2]=v;}
+                if(o->grayscale||o->levels||o->binarization){uint8_t v=(54*p[0]+183*p[1]+19*p[2]+128)>>8;p[0]=p[1]=p[2]=v;}
                 p[3]=255;
             }
         });
-        if(o->sharpen>0||o->blur>0){
-            std::vector<uint8_t> copy(dst,dst+size_t(ow)*oh*4);
-            rows(oh,o->threads,[&](uint32_t a,uint32_t b){
-                for(uint32_t y=a;y<b;++y)for(uint32_t x=0;x<ow;++x)for(int c=0;c<3;++c){
-                    int sum=0;for(int dy=-1;dy<=1;++dy)for(int dx=-1;dx<=1;++dx){
-                        auto xx=std::clamp(int(x)+dx,0,int(ow)-1),yy=std::clamp(int(y)+dy,0,int(oh)-1);
-                        sum+=copy[(size_t(yy)*ow+xx)*4+c]*(dx==0?2:1)*(dy==0?2:1);
-                    }
-                    size_t i=(size_t(y)*ow+x)*4+c;float v=copy[i],soft=sum/16.f;
-                    dst[i]=byte(v+(v-soft)*o->sharpen+(soft-v)*o->blur);
-                }
-            });
-        }
-        if(o->levels){
-            rows(oh,o->threads,[&](uint32_t a,uint32_t b){for(size_t i=size_t(a)*ow*4;i<size_t(b)*ow*4;i+=4){
-                auto q=byte(std::round(dst[i]*(o->levels-1)/255.f)*255.f/(o->levels-1));dst[i]=dst[i+1]=dst[i+2]=q;
-            }});
-        }
+        float angle=o->angle;
+        if(o->deskew)angle+=estimate(dst,ow,oh,o->deskew==2,o->deskew_limit);
+        if(std::abs(angle)>.001f)rotateFine(dst,ow,oh,angle,o->threads);
+        filter(dst,ow,oh,*o);
+        reduce(dst,ow,oh,*o);
         return 0;
     }catch(...){return -4;}
+}
+
+extern "C" int ce_estimate_skew(const uint8_t*src,uint32_t w,uint32_t h,int32_t vertical,float limit,float*degrees){
+    if(!src||!degrees||!w||!h||vertical<0||vertical>1||!std::isfinite(limit)||limit<1||limit>10)return -1;
+    if(uint64_t(w)*h>maxPixels)return -2;
+    try{*degrees=estimate(src,w,h,vertical!=0,limit);return 0;}catch(...){return -4;}
 }
