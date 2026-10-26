@@ -42,7 +42,10 @@ enum BatchExporter {
         let cap=max(1,min(8,ProcessInfo.processInfo.activeProcessorCount/workers))
         let names=pages.indices.map{recipes[$0].filename(index:indices[$0],page:pages[$0])}
         var first:[String:Int]=[:],duplicates=Set<Int>()
-        for (i,name) in names.enumerated() { if first[name] != nil { duplicates.insert(i) } else { first[name]=i } }
+        for (i,name) in names.enumerated() {
+            let key=name.precomposedStringWithCanonicalMapping.folding(options:.caseInsensitive,locale:Locale(identifier:"en_US_POSIX"))
+            if first[key] != nil { duplicates.insert(i) } else { first[key]=i }
+        }
         let lock=NSLock();var next=0,done=0,entries=[BatchReport.Entry?](repeating:nil,count:pages.count)
         DispatchQueue.concurrentPerform(iterations:workers) { _ in
             let old=ce_set_thread_budget(Int32(cap));defer { _ = ce_set_thread_budget(old) }

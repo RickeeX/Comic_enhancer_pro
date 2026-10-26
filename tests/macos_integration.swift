@@ -353,6 +353,10 @@ struct IntegrationTests {
         }
         let duplicates=BatchExporter.run(pages:[batchPages[0],batchPages[0]],recipes:[monoRecipe,monoRecipe],indices:[4,4],folder:batchFolder,cancelled:{false},progress:{_ in},workers:2)
         precondition(duplicates.succeeded==1 && duplicates.failed==1,"Concurrent duplicate names overwrote output")
+        var upperName=monoRecipe,lowerName=monoRecipe
+        upperName.nameStyle=1;lowerName.nameStyle=1;upperName.namePrefix="Case-";lowerName.namePrefix="case-"
+        let caseCollision=BatchExporter.run(pages:[batchPages[0],batchPages[0]],recipes:[upperName,lowerName],indices:[5,5],folder:batchFolder,cancelled:{false},progress:{_ in},workers:2)
+        precondition(caseCollision.succeeded==1 && caseCollision.failed==1,"Case-insensitive output collision was not reserved")
         let stopped=BatchExporter.run(pages:batchPages,recipes:batchPlans,indices:[10,11,12],folder:batchFolder,cancelled:{true},progress:{_ in},workers:2)
         precondition(stopped.completed==0,"Cancelled batch started processing pages")
         precondition(BatchExporter.workerCount(pages:batchPages,recipes:batchPlans,memory:256_000_000,cpus:8)==1,"Memory budget allowed unsafe parallelism")

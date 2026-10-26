@@ -250,6 +250,9 @@ void grayTests(){
    check(table[original*256+soft]==uint8_t(std::lround(std::clamp(value,0.f,255.f))),"all byte-pair blend entries preserve float formula");
   }
  }
+ ce_gray_workspace_trim(workspace,0);
+ auto neutral=ce_defaults();check(ce_process_gray(src,1,1,&neutral,dst,1,workspace)==0&&dst[0]==10,"trimmed workspace remains usable");
+ check(ce_process_gray(src,1,1,&neutral,dst,1,nullptr)==0,"temporary gray workspace is supported");
  ce_gray_workspace_destroy(workspace);
  check(ce_set_thread_budget(2)==0&&ce_set_thread_budget(0)==2,"page thread budget restores correctly");
 }

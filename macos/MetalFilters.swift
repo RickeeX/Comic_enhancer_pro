@@ -33,7 +33,8 @@ final class MetalFilters {
         self.device=device;self.queue=queue;self.pipeline=try device.makeComputePipelineState(function:function)
     }
     func run(_ source:GrayPlane,blur:Settings,usm:Settings) throws -> GrayPlane {
-        try autoreleasepool {
+        guard (1...3).contains(blur.filterRadius),(1...3).contains(usm.filterRadius),blur.blurMethod==0,usm.sharpenMethod==0 else { throw ProcessingError.message("Metal 滤镜配置不适用。") }
+        return try autoreleasepool {
             let count=source.width*source.height
             guard let input=device.makeBuffer(bytes:source.bytes,length:count,options:.storageModeShared),let tmp=device.makeBuffer(length:count,options:.storageModeShared),let blurred=device.makeBuffer(length:count,options:.storageModeShared),let output=device.makeBuffer(length:count,options:.storageModeShared),let bLUT=device.makeBuffer(length:65536,options:.storageModeShared),let sLUT=device.makeBuffer(length:65536,options:.storageModeShared),let commands=queue.makeCommandBuffer() else { throw ProcessingError.message("Metal 位图分配失败。") }
             guard ce_gray_blend_table(Float(blur.blur),0,0,bLUT.contents().assumingMemoryBound(to:UInt8.self),65536)==0,
@@ -84,7 +85,8 @@ final class MetalFilters {
         defer { lock.unlock() }
         // Calibrate on this device and page size. The CPU output also supplies
         // an exact fallback without recomputing the first candidate pair.
-        let start=Date(),cpu=try source.process(blur,workspace:workspace)!.process(usm,workspace:workspace)!
+        let start=Date()
+        guard let first=try source.process(blur,workspace:workspace),let cpu=try first.process(usm,workspace:workspace) else { choices[key]=false;return nil }
         let cpuTime=Date().timeIntervalSince(start)
         do {
             if !validated { try validate();validated=true }
