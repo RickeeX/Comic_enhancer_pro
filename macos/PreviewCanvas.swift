@@ -19,13 +19,31 @@ private final class CenteredClip: NSClipView {
 final class PaperDocument: NSView {
     var pictures: [NSImage] = []
     var rectangles: [NSRect] = []
+    var labels: [String] = []
+    var selected = 0
+    var grid = false
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
     override func draw(_ dirtyRect: NSRect) {
         NSGraphicsContext.current?.imageInterpolation = .high
-        for (image, rect) in zip(pictures, rectangles) where rect.intersects(dirtyRect) {
+        for (index, pair) in zip(pictures, rectangles).enumerated() {
+            let (image, rect) = pair
+            guard rect.intersects(dirtyRect) || NSRect(x:rect.minX,y:rect.minY-25,width:rect.width,height:25).intersects(dirtyRect) else { continue }
             NSColor.white.setFill(); NSBezierPath(rect: rect).fill()
             image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            if grid {
+                NSGraphicsContext.saveGraphicsState(); NSBezierPath(rect: rect).addClip()
+                let path = NSBezierPath(); path.lineWidth = 0.5
+                for x in stride(from: rect.minX, through: rect.maxX, by: 50) { path.move(to:NSPoint(x:x,y:rect.minY));path.line(to:NSPoint(x:x,y:rect.maxY)) }
+                for y in stride(from: rect.minY, through: rect.maxY, by: 50) { path.move(to:NSPoint(x:rect.minX,y:y));path.line(to:NSPoint(x:rect.maxX,y:y)) }
+                NSColor.systemTeal.withAlphaComponent(0.22).setStroke();path.stroke();NSGraphicsContext.restoreGraphicsState()
+            }
+            (index == selected ? NSColor.systemTeal : NSColor.separatorColor).setStroke()
+            let border = NSBezierPath(rect: rect); border.lineWidth = index == selected ? 2 : 0.5; border.stroke()
+            if labels.indices.contains(index) {
+                let title = labels[index] + (index == selected ? " · 当前编辑" : " · 点选编辑")
+                (title as NSString).draw(at:NSPoint(x:rect.minX,y:rect.minY-23),withAttributes:[.font:NSFont.monospacedSystemFont(ofSize:12,weight:.medium),.foregroundColor:NSColor.secondaryLabelColor])
+            }
         }
     }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
@@ -37,6 +55,7 @@ final class PaperDocument: NSView {
 final class PaperScroll: NSScrollView {
     let paper = PaperDocument()
     var fitMode = true
+    var onPictureSelected: ((Int) -> Void)?
     private var lastSize = NSSize.zero
     private var scale: CGFloat = 1
     private var dragStart: NSPoint?
@@ -111,7 +130,16 @@ final class PaperScroll: NSScrollView {
         let point = NSPoint(x: origin.x-(now.x-start.x)/magnification, y: origin.y+(now.y-start.y)/magnification)
         contentView.scroll(to: point); reflectScrolledClipView(contentView)
     }
-    override func mouseUp(with event: NSEvent) { if dragStart != nil { NSCursor.pop() }; dragStart = nil }
+    override func mouseUp(with event: NSEvent) {
+        if let start = dragStart {
+            NSCursor.pop()
+            if hypot(event.locationInWindow.x-start.x,event.locationInWindow.y-start.y) < 4 {
+                let point = paper.convert(event.locationInWindow, from:nil)
+                if let index = paper.rectangles.firstIndex(where: { $0.contains(point) }) { onPictureSelected?(index) }
+            }
+        }
+        dragStart = nil
+    }
     override func magnify(with event: NSEvent) { fitMode = false; super.magnify(with: event) }
     override func scrollWheel(with event: NSEvent) {
         if event.modifierFlags.contains(.command) {
@@ -131,6 +159,10 @@ final class PaperScroll: NSScrollView {
 struct PreviewCanvas: NSViewRepresentable {
     var images: [NSImage]
     var command: CanvasCommand
+    var labels: [String]
+    var selected: Int
+    var grid: Bool
+    var onSelect: (Int) -> Void
     @Binding var zoom: Double
     final class Coordinator {
         var parent: PreviewCanvas
@@ -150,6 +182,10 @@ struct PreviewCanvas: NSViewRepresentable {
     func updateNSView(_ view: NSScrollView, context: Context) {
         guard let scroll = view as? PaperScroll else { return }
         context.coordinator.parent = self; scroll.setPictures(images)
+        scroll.onPictureSelected = onSelect
+        if scroll.paper.labels != labels || scroll.paper.selected != selected || scroll.paper.grid != grid {
+            scroll.paper.labels = labels; scroll.paper.selected = selected; scroll.paper.grid = grid; scroll.paper.needsDisplay = true
+        }
         if context.coordinator.lastCommand != command.id { context.coordinator.lastCommand = command.id; scroll.command(command.action) }
     }
 }
@@ -157,10 +193,11 @@ struct PreviewPanel: View {
     @EnvironmentObject var model: Model
     @State private var command = CanvasCommand()
     @State private var zoom = 1.0
-    private var images: [NSImage] {
-        let first = model.showOriginal ? model.original : model.enhanced
-        let second = model.showOriginal ? model.secondOriginal : model.secondEnhanced
-        let values = [first, model.doublePreview ? second : nil].compactMap { $0 }
+    private struct Panel { var image: NSImage; var index: Int }
+    private var panels: [Panel] {
+        var values: [Panel] = []
+        if let first = model.showOriginal ? model.original : model.enhanced, let index = model.displayedIndices.first { values.append(Panel(image:first,index:index)) }
+        if model.doublePreview, let second = model.showOriginal ? model.secondOriginal : model.secondEnhanced, model.displayedIndices.count > 1 { values.append(Panel(image:second,index:model.displayedIndices[1])) }
         return model.rightToLeft ? Array(values.reversed()) : values
     }
     var body: some View {
@@ -177,11 +214,14 @@ struct PreviewPanel: View {
                     Toggle("右开书（左右交换）", isOn: $model.rightToLeft)
                     Toggle("全尺寸细节预览", isOn: $model.fullPreview)
                     Toggle("显示原图", isOn: $model.showOriginal)
+                    Toggle("纠斜辅助网格（不写出）", isOn: $model.showGrid)
                 } label: { Label("预览", systemImage: "rectangle.split.2x1") }
             }.controlSize(.small).padding(12)
             ZStack {
-                PreviewCanvas(images: images, command: command, zoom: $zoom)
-                if images.isEmpty && !model.previewing {
+                PreviewCanvas(images: panels.map(\.image), command: command, labels: panels.map { String(format:"%04d",$0.index) }, selected: panels.firstIndex(where: { $0.index == model.activeIndex }) ?? 0, grid: model.showGrid, onSelect: { index in
+                    if panels.indices.contains(index), model.files.indices.contains(panels[index].index) { model.selection = model.files[panels[index].index] }
+                }, zoom: $zoom)
+                if panels.isEmpty && !model.previewing {
                     VStack(spacing: 16) {
                         Image(systemName: "book.closed.fill").font(.system(size: 52)).foregroundStyle(.teal)
                         Text("每一页，都有自己的处理流程").font(.title3.weight(.medium))
@@ -191,13 +231,12 @@ struct PreviewPanel: View {
                 if model.previewing { ProgressView().padding(14).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) }
             }
             HStack {
-                Button { model.navigate(-1) } label: { Image(systemName: "chevron.left") }.disabled((model.activeIndex ?? 0) == 0)
+                Button { model.navigatePreview(-1) } label: { Image(systemName: "chevron.left") }.disabled((model.activeIndex ?? 0) == 0)
                 Text(model.activeIndex.map { String(format:"%04d",$0) } ?? "—").font(.caption.monospacedDigit())
-                Button { model.navigate(1) } label: { Image(systemName: "chevron.right") }.disabled((model.activeIndex ?? 0)+1 >= model.files.count)
+                Button { model.navigatePreview(1) } label: { Image(systemName: "chevron.right") }.disabled((model.displayedIndices.first ?? 0)+(model.doublePreview ? 2 : 1) >= model.files.count)
                 Spacer()
                 Text("拖动平移 · 捏合缩放 · ⌘滚轮 · 双击 100% / 适应").font(.caption2).foregroundStyle(.secondary)
             }.controlSize(.small).padding(12)
         }
-        .onChange(of: model.selection) { _ in command = CanvasCommand(action: .fit) }
     }
 }

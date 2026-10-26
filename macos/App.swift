@@ -146,7 +146,7 @@ struct RecipeInspector: View {
                 VStack(alignment: .leading, spacing: 15) {
                     if let stage = model.stage {
                         Label(stage.kind.title, systemImage: stage.kind.symbol).font(.headline)
-                        StageEditor(kind: stage.kind)
+                        StageEditor(kind: stage.kind).id("\(model.selection?.path ?? "")-\(model.selectedStage?.uuidString ?? "")")
                         DisclosureGroup("完整参数记录") { Text(stage.summary).font(.caption).textSelection(.enabled).lineSpacing(3) }
                     } else { Text("添加或选择一个操作以编辑参数。").foregroundStyle(.secondary) }
                     Divider()

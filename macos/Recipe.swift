@@ -116,7 +116,7 @@ struct RecipeBook {
     var values: [PageItem: Recipe] = [:]
     mutating func recipe(for page: PageItem) -> Recipe {
         if let existing = values[page] { return existing }
-        let created = Recipe.standard(); values[page] = created; return created
+        let created = Recipe.neutral; values[page] = created; return created
     }
     mutating func apply(_ recipe: Recipe, indices: Set<Int>, pages: [PageItem]) throws {
         _ = try recipe.validated()

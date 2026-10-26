@@ -169,8 +169,7 @@ private final class PDFPlacementContext {
 }
 extension PDFLoader {
     private static func scanPlacements(_ content: CGPDFContentStreamRef, context: PDFPlacementContext) {
-        guard context.depth < 8 else { return }
-        let table = CGPDFOperatorTableCreate()
+        guard context.depth < 8, let table = CGPDFOperatorTableCreate() else { return }
         defer { CGPDFOperatorTableRelease(table) }
         CGPDFOperatorTableSetCallback(table, "q", { _, info in
             guard let info = info else { return }

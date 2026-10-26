@@ -38,6 +38,8 @@ final class Model: ObservableObject {
     @Published var doublePreview = false { didSet { preview() } }
     @Published var fullPreview = false { didSet { preview() } }
     @Published var rightToLeft = false
+    @Published var showGrid = false
+    @Published var displayedIndices: [Int] = []
     @Published var busy = false
     @Published var previewing = false
     @Published var completed = 0
@@ -48,6 +50,9 @@ final class Model: ObservableObject {
     @Published var error: String?
     @Published var draggedStage: UUID?
     private var pageIndices: [PageItem: Int] = [:]
+    private var spreadAnchor: PageItem?
+    private struct PreviewEntry { var recipe: Recipe; var preview: Bool; var index: Int; var date: Date?; var value: PipelineResult }
+    private var previewCache: [PageItem: PreviewEntry] = [:] // Accessed only on queue; at most the visible pair.
     private var loading = false
     private var book = RecipeBook()
     private var undo: [PageItem: [Recipe]] = [:], redo: [PageItem: [Recipe]] = [:]
@@ -62,6 +67,19 @@ final class Model: ObservableObject {
     var canRedo: Bool { selection.map { !(redo[$0] ?? []).isEmpty } ?? false }
     func indexLabel(_ page: PageItem) -> String { String(format: "%04d", pageIndices[page] ?? 0) }
     func navigate(_ delta: Int) { guard let index = activeIndex, files.indices.contains(index + delta) else { return }; selection = files[index + delta] }
+    func navigatePreview(_ delta: Int) {
+        guard let current = activeIndex else { return }
+        let base = doublePreview ? displayedIndices.first ?? current : current
+        let target = max(0, base + delta * (doublePreview ? 2 : 1))
+        if files.indices.contains(target) { selection = files[target] }
+    }
+    private func renderedPreview(_ page: PageItem, recipe: Recipe, preview: Bool, index: Int) throws -> PipelineResult {
+        let date = (try? page.url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        if let entry = previewCache[page], entry.recipe == recipe, entry.preview == preview, entry.index == index, entry.date == date { return entry.value }
+        let value = try Pipeline.render(page, recipe: recipe, preview: preview, pageIndex: index)
+        previewCache[page] = PreviewEntry(recipe: recipe, preview: preview, index: index, date: date, value: value)
+        return value
+    }
     private func remember(_ recipe: Recipe, page: PageItem) {
         undo[page, default: []].append(recipe)
         if undo[page]!.count > 50 { undo[page]!.removeFirst() }; redo[page] = []
@@ -166,6 +184,7 @@ final class Model: ObservableObject {
             DispatchQueue.main.async {
                 self.files = Array(Set(self.files + imported)).sorted { $0.sortKey.localizedStandardCompare($1.sortKey) == .orderedAscending }
                 if self.selection == nil { self.selection = self.files.first }
+                self.preview()
                 self.importing = false; self.status = "已导入 \(self.files.count) 页，各页参数独立。"
                 if !issues.isEmpty { self.error = issues.prefix(5).joined(separator: "\n") }
             }
@@ -173,39 +192,49 @@ final class Model: ObservableObject {
     }
     func clearLibrary() {
         guard !busy && !importing else { return }
-        previewCancellation.cancel(); files = []; selection = nil; book = RecipeBook(); undo = [:]; redo = [:]; status = "资料库已清空，原文件未删除。"
+        previewCancellation.cancel(); queue.async { self.previewCache = [:] }; files = []; selection = nil; spreadAnchor = nil; book = RecipeBook(); undo = [:]; redo = [:]; status = "资料库已清空，原文件未删除。"
     }
     func preview() {
         guard !loading else { return }
         previewWork?.cancel(); previewCancellation.cancel(); generation = UUID()
         let cancel = Cancellation(); previewCancellation = cancel; let token = generation
-        guard let page = selection, let index = activeIndex else {
+        guard selection != nil, let index = activeIndex else {
+            displayedIndices = []
             original = nil; enhanced = nil; secondOriginal = nil; secondEnhanced = nil; previewing = false; sourceDescription = ""; outputDescription = ""; return
         }
-        let firstRecipe = recipe, previewMode = !fullPreview
-        let next = doublePreview && files.indices.contains(index+1) ? files[index+1] : nil
+        var base = index
+        if doublePreview, let anchor = spreadAnchor, let start = pageIndices[anchor], index == start || index == start+1 { base = start }
+        spreadAnchor = files[base]
+        let page = files[base]
+        let firstRecipe = book.values[page] ?? .neutral, previewMode = !fullPreview
+        let next = doublePreview && files.indices.contains(base+1) ? files[base+1] : nil
+        displayedIndices = next == nil ? [base] : [base,base+1]
         let nextRecipe = next.map { book.values[$0] ?? .neutral }
+        let firstIndex = base
         previewing = true
         let work = DispatchWorkItem {
             guard !cancel.isCancelled else { return }
-            let result = Result { try autoreleasepool { try Pipeline.render(page, recipe: firstRecipe, preview: previewMode, pageIndex: index) } }
+            let result = Result { try autoreleasepool { try self.renderedPreview(page, recipe: firstRecipe, preview: previewMode, index: firstIndex) } }
             guard !cancel.isCancelled else { return }
-            let second: Result<PipelineResult, Error>? = next.flatMap { item in nextRecipe.map { config in Result { try autoreleasepool { try Pipeline.render(item, recipe: config, preview: previewMode, pageIndex: index+1) } } } }
+            let second: Result<PipelineResult, Error>? = next.flatMap { item in nextRecipe.map { config in Result { try autoreleasepool { try self.renderedPreview(item, recipe: config, preview: previewMode, index: firstIndex+1) } } } }
             guard !cancel.isCancelled else { return }
+            self.previewCache = self.previewCache.filter { $0.key == page || $0.key == next }
             DispatchQueue.main.async {
                 guard self.generation == token else { return }
                 self.previewing = false
                 switch result {
                 case .success(let value):
                     self.original = NSImage(cgImage: value.original, size: .zero); self.enhanced = NSImage(cgImage: value.image, size: .zero)
-                    self.sourceDescription = value.source.description; self.outputDescription = value.description
+                    if index == firstIndex { self.sourceDescription = value.source.description; self.outputDescription = value.description }
                     self.status = "第 \(String(format: "%04d", index)) 页 · \(previewMode ? "缩略预览；可开启全尺寸检查细节" : "全尺寸预览")"
                 case .failure(let e): self.original = nil; self.enhanced = nil; self.error = e.localizedDescription
                 }
                 self.secondOriginal = nil; self.secondEnhanced = nil
                 if let second = second {
                     switch second {
-                    case .success(let value): self.secondOriginal = NSImage(cgImage: value.original, size: .zero); self.secondEnhanced = NSImage(cgImage: value.image, size: .zero)
+                    case .success(let value):
+                        self.secondOriginal = NSImage(cgImage: value.original, size: .zero); self.secondEnhanced = NSImage(cgImage: value.image, size: .zero)
+                        if index != firstIndex { self.sourceDescription = value.source.description; self.outputDescription = value.description }
                     case .failure(let e): self.error = "后一页：" + e.localizedDescription
                     }
                 }
