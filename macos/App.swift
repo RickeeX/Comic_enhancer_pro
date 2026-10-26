@@ -52,7 +52,7 @@ struct WorkspaceView: View {
                             Stepper("DPI", value: $model.pdfDPI, in: 72...600, step: 25).labelsHidden()
                         }
                     }
-                    Text(model.pdfMode == 0 ? "保留文字、矢量和页面排版；按需逐页渲染。" : "每张 XObject 图片独立列出；不包含矢量文字与页面排版。")
+                    Text(model.pdfMode == 0 ? "保留文字、矢量和页面排版；按需逐页渲染。" : "每张内嵌图片独立处理；不包含矢量文字与页面排版。")
                         .font(.caption2).foregroundStyle(.secondary)
                     Button(action: model.addFiles) { Label(model.importing ? "建立索引中…" : "导入图片 / PDF", systemImage: "plus").frame(maxWidth: .infinity) }
                         .buttonStyle(.borderedProminent)

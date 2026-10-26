@@ -72,7 +72,7 @@ enum PDFLoader {
                 for index in images(resources(page)).indices { items.append(PageItem(url: url, pdfPage: number, embeddedIndex: index, dpi: dpi)) }
             } else { items.append(PageItem(url: url, pdfPage: number, dpi: dpi)) }
         }
-        guard !items.isEmpty else { throw ProcessingError.message("PDF 中没有可提取的内嵌图片，请选择按页渲染。内联 BI 图片不作为 XObject 提取。") }
+        guard !items.isEmpty else { throw ProcessingError.message("PDF 中没有可提取的内嵌图片，请选择按页渲染。") }
         return items
     }
     static func image(_ item: PageItem, preview: Bool) throws -> CGImage {
@@ -111,7 +111,7 @@ enum PDFLoader {
         var mask: CGPDFStreamRef?
         var colorMask: CGPDFArrayRef?
         var decode: CGPDFArrayRef?
-        if CGPDFDictionaryGetArray(dict, "Decode", &decode) { throw ProcessingError.message("此图片有自定义 Decode 映射，请选择按页渲染以保留外观。") }
+        if CGPDFDictionaryGetArray(dict, "Decode", &decode) { throw ProcessingError.message("此图片有自定义色彩映射，请选择按页渲染以保留外观。") }
         if CGPDFDictionaryGetArray(dict, "Mask", &colorMask) || CGPDFDictionaryGetStream(dict, "SMask", &mask) || CGPDFDictionaryGetStream(dict, "Mask", &mask) {
             throw ProcessingError.message("此内嵌图片有透明掩膜，请选择 PDF 按页渲染以保留外观。")
         }
@@ -125,7 +125,7 @@ enum PDFLoader {
         var format = CGPDFDataFormat.raw
         guard let data = CGPDFStreamCopyData(stream, &format) else { throw ProcessingError.message("无法解压 PDF 图片。") }
         var image: CGImage?
-        if let source = CGImageSourceCreateWithData(data, nil) {
+        if format != .raw, let source = CGImageSourceCreateWithData(data, nil) {
             image = CGImageSourceCreateThumbnailAtIndex(source, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true,
                 kCGImageSourceThumbnailMaxPixelSize: preview ? min(1600, max(w, h)) : max(w, h)] as CFDictionary)
         } else {
@@ -142,7 +142,7 @@ enum PDFLoader {
             let stride = (w * bits * space.numberOfComponents + 7) / 8
             guard CFDataGetLength(data) >= stride * h, let provider = CGDataProvider(data: data) else { throw ProcessingError.message("PDF 图片数据不完整。") }
             var decodeArray: CGPDFArrayRef?
-            if CGPDFDictionaryGetArray(dict, "Decode", &decodeArray) { throw ProcessingError.message("此图片有自定义 Decode 映射，请选择按页渲染以保留外观。") }
+            if CGPDFDictionaryGetArray(dict, "Decode", &decodeArray) { throw ProcessingError.message("此图片有自定义色彩映射，请选择按页渲染以保留外观。") }
             image = CGImage(width: w, height: h, bitsPerComponent: bits, bitsPerPixel: bits * space.numberOfComponents,
                 bytesPerRow: stride, space: space, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
                 provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
