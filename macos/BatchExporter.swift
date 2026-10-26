@@ -36,9 +36,9 @@ enum BatchExporter {
         let budget=min(UInt64(1_500_000_000),memory/5)
         return bound<=budget/2 ? 2:1
     }
-    static func run(pages:[PageItem],recipes:[Recipe],indices:[Int],folder:URL,cancelled:@escaping ()->Bool,progress:@escaping (Int)->Void,workers override:Int?=nil) -> BatchReport {
+    static func run(pages:[PageItem],recipes:[Recipe],indices:[Int],folder:URL,cancelled:@escaping ()->Bool,progress:@escaping (Int)->Void,workers requestedWorkers:Int?=nil) -> BatchReport {
         guard recipes.count==pages.count,indices.count==pages.count else { return BatchReport(entries:[],workers:1) }
-        let workers=min(max(1,override ?? workerCount(pages:pages,recipes:recipes)),min(2,max(1,pages.count)))
+        let workers=min(max(1,requestedWorkers ?? workerCount(pages:pages,recipes:recipes)),min(2,max(1,pages.count)))
         let cap=max(1,min(8,ProcessInfo.processInfo.activeProcessorCount/workers))
         let names=pages.indices.map{recipes[$0].filename(index:indices[$0],page:pages[$0])}
         var first:[String:Int]=[:],duplicates=Set<Int>()

@@ -70,6 +70,17 @@ jobs:
           for line in Path('.build/native-performance.log').read_text().splitlines():
               print(f'::notice title=30 MP native pipeline::{line}')
           PYCODE
+      - name: Evaluate Gray8 Accelerate and Metal
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./scripts/benchmark-acceleration.sh 2>&1 | tee .build/acceleration.log
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          for line in Path('.build/acceleration.log').read_text().splitlines():
+              if 'MP ' in line or 'Metal evaluation:' in line:
+                  print(f'::notice title=Mac acceleration evaluation::{line}')
+          PYCODE
       - name: Universal app build
         shell: bash
         run: |
