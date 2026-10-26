@@ -14,8 +14,10 @@ func paint(_ size: Int, to url: URL) throws {
     let base = NSBezierPath(roundedRect: NSRect(x: 28, y: 28, width: 968, height: 968), xRadius: 220, yRadius: 220)
     NSGradient(starting: NSColor(srgbRed: 0.04, green: 0.25, blue: 0.27, alpha: 1),
                ending: NSColor(srgbRed: 0.12, green: 0.61, blue: 0.56, alpha: 1))!.draw(in: base, angle: 55)
+    NSGraphicsContext.saveGraphicsState(); base.addClip()
     NSColor.white.withAlphaComponent(0.05).setFill()
     NSBezierPath(ovalIn: NSRect(x: 300, y: 420, width: 650, height: 650)).fill()
+    NSGraphicsContext.restoreGraphicsState()
     let left = NSBezierPath()
     left.move(to: NSPoint(x: 205, y: 292)); left.line(to: NSPoint(x: 205, y: 724))
     left.curve(to: NSPoint(x: 507, y: 690), controlPoint1: NSPoint(x: 310, y: 780), controlPoint2: NSPoint(x: 422, y: 760))
