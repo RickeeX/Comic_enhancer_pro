@@ -71,8 +71,39 @@ struct IntegrationTests {
         try Pipeline.write(result,to:folder.appendingPathComponent("output.png"),recipe:recipe)
         print(String(format:"30 MP native full-size decode + tone + USM + Sauvola: %.0f ms; 1-bit PNG export: %.0f ms",processed.timeIntervalSince(start)*1000,Date().timeIntervalSince(processed)*1000))
     }
+    static func batchBenchmark() throws {
+        let root=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at:root,withIntermediateDirectories:false)
+        defer { try? FileManager.default.removeItem(at:root) }
+        let plane=try GrayPlane(width:1672,height:2658) { out in
+            for y in 0..<2658 { for x in 0..<1672 { out[y*1672+x]=UInt8((x%19<3 && y%31<13 ? 35:180)+(x*17+y*31)%35) } }
+        }
+        var jpeg=Settings();jpeg.format="jpg"
+        var pages=[PageItem]()
+        for i in 0..<4 { let url=root.appendingPathComponent("scan-\(i).jpg");try Processor.writeEncoded(plane.exportImage(bits:8),to:url,settings:jpeg,dpiX:300,dpiY:300);pages.append(PageItem(url:url)) }
+        var resize=Stage(.resize);resize.settings.preservePhysical=true;resize.settings.sourceDPI=300;resize.settings.targetDPI=600
+        var tone=Stage(.tone);tone.settings.brightness=0.04;tone.settings.contrast=1.1;tone.settings.gamma=1.1
+        var blur=Stage(.blur);blur.settings.blur=0.3;blur.settings.filterRadius=1
+        var usm=Stage(.sharpen);usm.settings.sharpen=0.6;usm.settings.filterRadius=2;usm.settings.sharpenThreshold=2
+        var binary=Stage(.binary);binary.settings.binarization=3;binary.settings.edgeSmooth=true;binary.settings.fillNotches=true
+        let plans=Array(repeating:Recipe(stages:[resize,tone,blur,usm,binary]),count:4)
+        print("Batch hardware: \(ProcessInfo.processInfo.activeProcessorCount) active CPUs; \(ProcessInfo.processInfo.physicalMemory/1_000_000) MB RAM; automatic workers=\(BatchExporter.workerCount(pages:pages,recipes:plans))")
+        for workers in [1,2] {
+            var samples=[Double]()
+            for trial in -1..<3 {
+                let folder=root.appendingPathComponent("out-\(workers)-\(trial)")
+                try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:false)
+                let start=Date(),report=BatchExporter.run(pages:pages,recipes:plans,indices:[0,1,2,3],folder:folder,cancelled:{false},progress:{_ in},workers:workers)
+                let ms=Date().timeIntervalSince(start)*1000
+                guard report.succeeded==4 && report.failed==0 else { throw ProcessingError.message(report.log) }
+                if trial>=0 { samples.append(ms) }
+            }
+            print(String(format:"Four 17.78 MP pages native export, workers=%d: %.1f ms total",workers,samples.reduce(0,+)/Double(samples.count)))
+        }
+    }
     static func main() throws {
         if CommandLine.arguments.contains("--benchmark") { try benchmark();return }
+        if CommandLine.arguments.contains("--benchmark-batch") { try batchBenchmark();return }
 
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)

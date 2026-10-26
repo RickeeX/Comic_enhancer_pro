@@ -98,6 +98,16 @@ jobs:
           assert len(fingerprints)==2 and fingerprints[0]==fingerprints[1], 'Native full stack changed output pixels'
 
           PYCODE
+      - name: Compare bounded batch modes
+        shell: bash
+        run: |
+          set -euo pipefail
+          .build/macos-tests --benchmark-batch | tee .build/batch-performance.log
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          for line in Path('.build/batch-performance.log').read_text().splitlines():
+              print(f'::notice title=Bounded batch comparison::{line}')
+          PYCODE
       - name: Universal app build
         shell: bash
         run: |
