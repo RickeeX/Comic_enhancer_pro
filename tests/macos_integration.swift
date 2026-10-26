@@ -4,7 +4,7 @@ import ImageIO
 
 @main
 struct IntegrationTests {
-    static func pdfFixture(_ url: URL) throws {
+    static func pdfFixture(_ url: URL, jpeg: Data? = nil) throws {
         let content = "q 80 0 0 40 24 60 cm /Im1 Do Q\n1 0 0 rg 10 180 30 20 re f\n"
         let pixels: [UInt8] = [0,0,0, 255,255,255, 255,0,0, 0,255,0, 0,0,255, 120,120,120, 200,200,200, 255,255,255]
         var objects: [Data] = [
@@ -14,8 +14,10 @@ struct IntegrationTests {
             Data("<< /Type /Page /Parent 2 0 R /Rotate 90 /Contents 5 0 R >>".utf8),
             Data("<< /Length \(content.utf8.count) >>\nstream\n\(content)endstream".utf8)
         ]
-        var image = Data("<< /Type /XObject /Subtype /Image /Width 4 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length 24 >>\nstream\n".utf8)
-        image.append(contentsOf: pixels); image.append(Data("\nendstream".utf8)); objects.append(image)
+        let payload = jpeg ?? Data(pixels)
+        let dimensions = jpeg == nil ? "/Width 4 /Height 2" : "/Width 120 /Height 80 /Filter /DCTDecode"
+        var image = Data("<< /Type /XObject /Subtype /Image \(dimensions) /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length \(payload.count) >>\nstream\n".utf8)
+        image.append(payload); image.append(Data("\nendstream".utf8)); objects.append(image)
         var pdf = Data("%PDF-1.4\n".utf8), offsets = [0]
         for (index, object) in objects.enumerated() {
             offsets.append(pdf.count); pdf.append(Data("\(index + 1) 0 obj\n".utf8)); pdf.append(object); pdf.append(Data("\nendobj\n".utf8))
@@ -102,6 +104,13 @@ struct IntegrationTests {
         let pageOne = try Processor.render(pages[0], settings: Settings(), preview: false)
         let pageTwo = try Processor.render(pages[1], settings: Settings(), preview: false)
         precondition(pageOne.original.width == 288 && pageOne.original.height == 432)
+        let raster = pageOne.enhanced.dataProvider!.data! as Data
+        var redCount = 0, blackCount = 0
+        for i in stride(from: 0, to: raster.count, by: 4) {
+            if raster[i] > 200 && raster[i+1] < 50 && raster[i+2] < 50 { redCount += 1 }
+            if raster[i] < 30 && raster[i+1] < 30 && raster[i+2] < 30 { blackCount += 1 }
+        }
+        precondition(redCount > 100 && blackCount > 100, "PDF vector content or image content was not drawn")
         precondition(pageTwo.original.width == 432 && pageTwo.original.height == 288, "PDF page rotation ignored")
         let extracted = try PDFLoader.items(pdfURL, embedded: true, dpi: 200)
         precondition(extracted.count == 2, "Inherited PDF resources not found")
@@ -109,6 +118,16 @@ struct IntegrationTests {
         precondition(embedded.original.width == 4 && embedded.original.height == 2, "Embedded image was rasterized at PDF DPI")
         let embeddedBytes = embedded.enhanced.dataProvider!.data! as Data
         precondition(embeddedBytes[0] == 0 && embeddedBytes[4] == 255, "Raw RGB extraction changed image data")
+        var jpegSettings = Settings(); jpegSettings.format = "jpg"
+        let jpegURL = folder.appendingPathComponent("embedded-source.jpg")
+        try Processor.write(image, to: jpegURL, settings: jpegSettings)
+        let jpegPDF = folder.appendingPathComponent("jpeg-book.pdf")
+        try pdfFixture(jpegPDF, jpeg: Data(contentsOf: jpegURL))
+        let jpegItems = try PDFLoader.items(jpegPDF, embedded: true, dpi: 300)
+        let extractedJPEG = try Processor.render(jpegItems[0], settings: Settings(), preview: false)
+        let originalJPEG = try Processor.render(jpegURL, settings: Settings(), preview: false)
+        precondition(extractedJPEG.enhanced.width == 120 && extractedJPEG.enhanced.height == 80)
+        precondition((extractedJPEG.enhanced.dataProvider!.data! as Data) == (originalJPEG.enhanced.dataProvider!.data! as Data), "DCT image stream extraction differs from JPEG decode")
         let cached = try Processor.render(pages[0], settings: Settings(), preview: true)
         precondition(cached.original.width == 288)
         var changed = Settings(); changed.brightness = 0.25
