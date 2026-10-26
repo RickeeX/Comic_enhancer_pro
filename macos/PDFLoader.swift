@@ -89,7 +89,7 @@ enum PDFLoader {
         var width = abs(bounds.width), height = abs(bounds.height)
         if abs(page.rotationAngle) % 180 == 90 { swap(&width, &height) }
         width = ceil(width * CGFloat(item.dpi) / 72); height = ceil(height * CGFloat(item.dpi) / 72)
-        guard width.isFinite, height.isFinite, width > 0, height > 0, width * height <= 40_000_000 else { throw ProcessingError.message("PDF 渲染超过 4000 万像素，请降低导入 DPI。") }
+        guard width.isFinite, height.isFinite, width > 0, height > 0, width * height <= 100_000_000 else { throw ProcessingError.message("PDF 渲染超过 1 亿像素，请降低导入 DPI。") }
         if preview {
             let ratio = min(1, 1600 / max(width, height)); width = max(1, floor(width * ratio)); height = max(1, floor(height * ratio))
         }
@@ -107,7 +107,7 @@ enum PDFLoader {
         var w: CGPDFInteger = 0, h: CGPDFInteger = 0, bits: CGPDFInteger = 8
         _ = CGPDFDictionaryGetInteger(dict, "Width", &w); _ = CGPDFDictionaryGetInteger(dict, "Height", &h)
         _ = CGPDFDictionaryGetInteger(dict, "BitsPerComponent", &bits)
-        guard w > 0, h > 0, w <= 40_000_000 / h else { throw ProcessingError.message("PDF 内嵌图片超过像素上限。") }
+        guard w > 0, h > 0, w <= 100_000_000 / h else { throw ProcessingError.message("PDF 内嵌图片超过像素上限。") }
         var mask: CGPDFStreamRef?
         var colorMask: CGPDFArrayRef?
         var decode: CGPDFArrayRef?
@@ -157,5 +157,91 @@ enum PDFLoader {
             if let small = ctx.makeImage() { return small }
         }
         return result
+    }
+}
+
+private final class PDFPlacementContext {
+    var transform = CGAffineTransform.identity
+    var saved: [CGAffineTransform] = []
+    var sizes: [CGPDFStreamRef: CGSize] = [:]
+    var depth = 0
+    var operations = 0
+}
+extension PDFLoader {
+    private static func scanPlacements(_ content: CGPDFContentStreamRef, context: PDFPlacementContext) {
+        guard context.depth < 8, let table = CGPDFOperatorTableCreate() else { return }
+        CGPDFOperatorTableSetCallback(table, "q", { _, info in
+            guard let info = info else { return }
+            let c = Unmanaged<PDFPlacementContext>.fromOpaque(info).takeUnretainedValue(); c.saved.append(c.transform)
+        })
+        CGPDFOperatorTableSetCallback(table, "Q", { _, info in
+            guard let info = info else { return }
+            let c = Unmanaged<PDFPlacementContext>.fromOpaque(info).takeUnretainedValue()
+            if let last = c.saved.popLast() { c.transform = last }
+        })
+        CGPDFOperatorTableSetCallback(table, "cm", { scanner, info in
+            guard let scanner = scanner, let info = info else { return }
+            let c = Unmanaged<PDFPlacementContext>.fromOpaque(info).takeUnretainedValue()
+            var values = [CGPDFReal](repeating: 0, count: 6)
+            for i in (0..<6).reversed() { guard CGPDFScannerPopNumber(scanner, &values[i]) else { return } }
+            let m = CGAffineTransform(a: values[0], b: values[1], c: values[2], d: values[3], tx: values[4], ty: values[5])
+            c.transform = m.concatenating(c.transform)
+        })
+        CGPDFOperatorTableSetCallback(table, "Do", { scanner, info in
+            guard let scanner = scanner, let info = info else { return }
+            let c = Unmanaged<PDFPlacementContext>.fromOpaque(info).takeUnretainedValue()
+            c.operations += 1; guard c.operations <= 100000 else { return }
+            var name: UnsafePointer<CChar>?
+            guard CGPDFScannerPopName(scanner, &name), let name = name,
+                  let content = CGPDFScannerGetContentStream(scanner),
+                  let object = CGPDFContentStreamGetResource(content, "XObject", name) else { return }
+            var stream: CGPDFStreamRef?
+            guard CGPDFObjectGetValue(object, .stream, &stream), let stream = stream,
+                  let dict = CGPDFStreamGetDictionary(stream) else { return }
+            var type: UnsafePointer<CChar>?
+            guard CGPDFDictionaryGetName(dict, "Subtype", &type), let type = type else { return }
+            if String(cString: type) == "Image" {
+                let w = hypot(c.transform.a, c.transform.b), h = hypot(c.transform.c, c.transform.d)
+                if w.isFinite, h.isFinite, w > 0, h > 0 {
+                    let size = CGSize(width: w, height: h)
+                    if w * h > (c.sizes[stream].map { $0.width * $0.height } ?? 0) { c.sizes[stream] = size }
+                }
+            } else if String(cString: type) == "Form", c.depth < 7 {
+                let saved = c.transform, stack = c.saved
+                var matrix: CGPDFArrayRef?
+                if CGPDFDictionaryGetArray(dict, "Matrix", &matrix), let matrix = matrix, CGPDFArrayGetCount(matrix) == 6 {
+                    var v = [CGPDFReal](repeating: 0, count: 6)
+                    for i in 0..<6 { _ = CGPDFArrayGetNumber(matrix, i, &v[i]) }
+                    c.transform = CGAffineTransform(a: v[0], b: v[1], c: v[2], d: v[3], tx: v[4], ty: v[5]).concatenating(c.transform)
+                }
+                var resources: CGPDFDictionaryRef?
+                _ = CGPDFDictionaryGetDictionary(dict, "Resources", &resources)
+                if let nested = CGPDFContentStreamCreateWithStream(stream, resources, content) {
+                    c.depth += 1; PDFLoader.scanPlacements(nested, context: c); c.depth -= 1
+                }
+                c.transform = saved; c.saved = stack
+            }
+        })
+        if let scanner = CGPDFScannerCreate(content, table, Unmanaged.passUnretained(context).toOpaque()) { _ = CGPDFScannerScan(scanner) }
+    }
+    static func sourceInfo(_ item: PageItem) throws -> SourceInfo {
+        lock.lock(); defer { lock.unlock() }
+        let doc = try document(item.url)
+        guard let number = item.pdfPage, let page = doc.page(at: number) else { throw ProcessingError.message("PDF 页面不存在。") }
+        if let index = item.embeddedIndex {
+            let streams = images(resources(page))
+            guard streams.indices.contains(index), let dict = CGPDFStreamGetDictionary(streams[index]) else { throw ProcessingError.message("PDF 图片不存在。") }
+            var w: CGPDFInteger = 0, h: CGPDFInteger = 0
+            _ = CGPDFDictionaryGetInteger(dict, "Width", &w); _ = CGPDFDictionaryGetInteger(dict, "Height", &h)
+            let context = PDFPlacementContext()
+            if let content = CGPDFContentStreamCreateWithPage(page) { scanPlacements(content, context: context) }
+            let size = context.sizes[streams[index]]
+            return SourceInfo(width: w, height: h, dpiX: size.map { Double(w) * 72 / $0.width }, dpiY: size.map { Double(h) * 72 / $0.height })
+        }
+        let rect = page.getBoxRect(.cropBox)
+        var w = Double(abs(rect.width)), h = Double(abs(rect.height))
+        if abs(page.rotationAngle) % 180 == 90 { swap(&w, &h) }
+        let pixelsW = Int(ceil(w * Double(item.dpi) / 72)), pixelsH = Int(ceil(h * Double(item.dpi) / 72))
+        return SourceInfo(width: pixelsW, height: pixelsH, dpiX: Double(pixelsW) * 72 / w, dpiY: Double(pixelsH) * 72 / h)
     }
 }

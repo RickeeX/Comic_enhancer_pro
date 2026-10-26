@@ -1,6 +1,6 @@
 import Foundation
 
-struct PageItem: Hashable, Identifiable {
+struct PageItem: Codable, Hashable, Identifiable {
     let url: URL
     var pdfPage: Int? = nil // One-based PDF page; nil for an ordinary image.
     var embeddedIndex: Int? = nil

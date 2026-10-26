@@ -83,6 +83,47 @@ void advancedTests(){
    auto tiny=run(rgba(std::vector<uint8_t>(bw*bh,180)),bw,bh,o);check(tiny.size()==size_t(bw*bh*4),"tiny image edge safety");
  }
 }
+
+void pageTests(){
+ auto rgba=[](const std::vector<uint8_t>&gray){std::vector<uint8_t> out(gray.size()*4,255);for(size_t i=0;i<gray.size();++i)out[i*4]=out[i*4+1]=out[i*4+2]=gray[i];return out;};
+ std::vector<uint8_t> values={0,40,80,120,160,200,240,255};auto source=rgba(values);
+ for(int method=0;method<3;++method){
+   std::vector<uint8_t> result(source.size());float rect[4]={0,0,4,2};
+   check(ce_canvas(source.data(),4,2,4,2,rect,method,result.data(),result.size())==0,"canvas succeeds");
+   check(result==source,"every resampler has exact identity at integer samples");
+ }
+ std::vector<uint8_t> result(6*4*4);float padded[4]={1,1,4,2};
+ check(ce_canvas(source.data(),4,2,6,4,padded,2,result.data(),result.size())==0,"padded canvas");
+ check(result[0]==255&&result[(1*6+1)*4]==0&&result[(2*6+4)*4]==255,"white margin and content placement");
+ float clipped[4]={-1,0,4,2};result.resize(2*2*4);
+ check(ce_canvas(source.data(),4,2,2,2,clipped,1,result.data(),result.size())==0,"overflow crop");
+ check(result[0]==40&&result[4]==80&&result[8]==200,"overflow pixels sampled in top-left coordinates");
+ float farAway[4]={1.e9f,1.e9f,1.e-20f,1.e-20f};
+ check(ce_canvas(source.data(),4,2,2,2,farAway,2,result.data(),result.size())==0&&result[0]==255,"outside canvas does not overflow sample indices");
+ check(ce_canvas(source.data(),4,2,2,2,clipped,1,result.data(),1)==-3,"canvas capacity check");
+ auto mirrored=source;check(ce_mirror(source.data(),4,2,1,1,mirrored.data(),mirrored.size())==0,"mirror succeeds");
+ for(int i=0;i<8;++i)check(mirrored[i*4]==values[7-i],"mirror both axes");
+ check(ce_invert(mirrored.data(),4,2)==0&&ce_invert(mirrored.data(),4,2)==0,"invert succeeds");
+ std::vector<uint8_t> dots(20*20,255);
+ for(int y=2;y<4;++y)for(int x=2;x<4;++x)dots[y*20+x]=0;
+ for(int x=8;x<13;++x)dots[10*20+x]=0;
+ dots[15*20+15]=180;auto data=rgba(dots);
+ check(ce_despeckle(data.data(),20,20,2,127,0)==0,"connected despeckle");
+ check(data[(2*20+2)*4]==255&&data[(10*20+8)*4]==0&&data[(15*20+15)*4]==180,"remove only small dark bounding boxes, keep long strokes and pale pixels");
+ check(ce_despeckle(data.data(),20,20,2,200,0)==0&&data[(15*20+15)*4]==255,"gray threshold is adjustable");
+ dots.assign(400,255);for(int y=0;y<8;++y)dots[y*20+5]=0;dots[12*20+12]=0;data=rgba(dots);
+ check(ce_despeckle(data.data(),20,20,0,127,1)==0&&data[5*4]==255&&data[(12*20+12)*4]==0,"border removal does not remove detached foreground");
+ dots.assign(400,255);dots[1*20+1]=0;for(int y=6;y<12;++y)for(int x=8;x<15;++x)dots[y*20+x]=0;data=rgba(dots);uint32_t bounds[4];
+ check(ce_content_bounds(data.data(),20,20,127,1,bounds)==0,"content bounds");
+ check(bounds[0]==8&&bounds[1]==6&&bounds[2]==7&&bounds[3]==6,"content bounds ignore small marks");
+ data=rgba(std::vector<uint8_t>(400,255));check(ce_content_bounds(data.data(),20,20,127,0,bounds)==0&&bounds[2]==20&&bounds[3]==20,"blank page bounds stay whole");
+ dots.assign(400,255);for(int y=6;y<12;++y)for(int x=6;x<12;++x)dots[y*20+x]=0;dots[5*20+8]=0;dots[9*20+9]=255;
+ data=rgba(dots);check(ce_smooth_binary(data.data(),20,20,1,0)==0,"template smoothing");
+ check(data[(5*20+8)*4]==255&&data[(9*20+9)*4]==255&&data[(6*20+8)*4]==0,"templates remove protrusion without filling an enclosed hole or eroding the body");
+ dots.assign(400,255);for(int i=3;i<17;++i){dots[10*20+i]=0;dots[i*20+i]=0;}auto thin=rgba(dots);data=thin;
+ check(ce_smooth_binary(data.data(),20,20,3,1)==0&&data==thin,"thin strokes and endpoints survive repeated smoothing");
+ data=rgba(std::vector<uint8_t>(400,128));check(ce_smooth_binary(data.data(),20,20,1,0)==-1,"nonbinary smoothing rejected");
+}
 int main(int argc,char**argv){
  (void)argv;
  auto o=ce_defaults();std::vector<uint8_t> s;
@@ -123,8 +164,8 @@ int main(int argc,char**argv){
  check(ce_process(s.data(),3,2,&o,s.data(),s.size())==-1,"alias rejected");
  check(ce_process(nullptr,3,2,&o,dest,24)==-1,"null input rejected");
  check(ce_dimensions(0,1,&o,&w,&h)==-1,"zero width rejected");
- check(ce_dimensions(40000001,1,&o,&w,&h)==-2,"input limit");
- o.scale=2;check(ce_dimensions(10000,2000,&o,&w,&h)==-2,"output limit");
+ check(ce_dimensions(100000001,1,&o,&w,&h)==-2,"input limit");
+ o.scale=2;check(ce_dimensions(20000,2000,&o,&w,&h)==-2,"output limit");
  o.gamma=std::numeric_limits<float>::quiet_NaN();check(ce_dimensions(1,1,&o,&w,&h)==-1,"NaN rejected");
  o=ce_defaults();o.rotation=4;check(ce_dimensions(1,1,&o,&w,&h)==-1,"invalid rotation");
  o=ce_defaults();o.page=1;check(ce_dimensions(1,1,&o,&w,&h)==-1,"impossible split");
@@ -134,6 +175,7 @@ int main(int argc,char**argv){
  o=ce_defaults();o.blur=1;r=run(impulse,5,5,o);check(r[48]==32&&r[44]>0,"Gaussian blur kernel");
  o.blur=0;o.sharpen=1;r=run(impulse,5,5,o);check(r[48]==224,"unsharp mask kernel");
  advancedTests();
+ pageTests();
  std::cout<<"PASS: "<<checks<<" checks\n";
  if(argc>1){
    std::vector<uint8_t> big(3000*4000*4,255);

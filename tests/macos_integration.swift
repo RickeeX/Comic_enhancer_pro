@@ -138,6 +138,75 @@ struct IntegrationTests {
         catch is ProcessingError { }
         do { _ = try PDFLoader.image(PageItem(url: pdfURL, pdfPage: 999), preview: false); fatalError("Invalid PDF page accepted") }
         catch is ProcessingError { }
-        print("PASS: macOS ImageIO decode, transform, PNG/JPEG/TIFF round trips, presets, malformed input, 1-bit PNG/TIFF, advanced algorithms, legacy migration, PDF rendering/extraction/rotation and source cache")
+        // Ordered and repeated operations must be observably different.
+        var sharpen = Stage(.sharpen); sharpen.settings.sharpen = 1.2
+        var blur = Stage(.blur); blur.settings.blur = 0.7
+        var tone = Stage(.tone); tone.settings.brightness = 0.12; tone.settings.gamma = 1.6
+        let ordered = Recipe(stages: [tone, sharpen, blur, sharpen.duplicated()])
+        let reordered = Recipe(stages: [sharpen, blur, tone, sharpen.duplicated()])
+        let first = try Pipeline.render(PageItem(url: source), recipe: ordered, preview: false)
+        let changedOrder = try Pipeline.render(PageItem(url: source), recipe: reordered, preview: false)
+        precondition((first.image.dataProvider!.data! as Data) != (changedOrder.image.dataProvider!.data! as Data), "Operation order was ignored")
+        let singleSharpen = try Pipeline.render(PageItem(url: source), recipe: Recipe(stages: [tone, sharpen, blur]), preview: false)
+        precondition((first.image.dataProvider!.data! as Data) != (singleSharpen.image.dataProvider!.data! as Data), "Repeated operation was dropped")
+        var binaryStage = Stage(.binary); binaryStage.settings.binarization = 2; binaryStage.settings.edgeSmooth = true
+        let finalBinary = try Pipeline.render(PageItem(url: source), recipe: Recipe(stages: [tone, sharpen, blur, binaryStage]), preview: false)
+        let binaryPixels = finalBinary.image.dataProvider!.data! as Data
+        precondition(finalBinary.grayLevels == 2)
+        for i in stride(from: 0, to: binaryPixels.count, by: 4) { precondition(binaryPixels[i] == 0 || binaryPixels[i] == 255) }
+        let binaryThenBlur = try Pipeline.render(PageItem(url: source), recipe: Recipe(stages: [binaryStage, blur]), preview: false)
+        precondition(binaryThenBlur.grayLevels == 0, "Postbinary filtering was incorrectly labeled bilevel")
+        var pageStage = Stage(.page); pageStage.settings.sourceDPI = 300; pageStage.settings.preservePhysical = true; pageStage.settings.targetDPI = 800
+        var highDPIRecipe = Recipe(stages: [pageStage, blur, sharpen, binaryStage])
+        let highDPI = try Pipeline.render(PageItem(url: source), recipe: highDPIRecipe, preview: false)
+        precondition(highDPI.image.width == 320 && highDPI.image.height == 213)
+        precondition(highDPI.dpiX == 800 && highDPI.dpiY == 800)
+        precondition(abs(Double(highDPI.logicalWidth)/highDPI.dpiX - 120.0/300) < 1.0/800)
+        for format in ["png", "tiff", "jpg"] {
+            highDPIRecipe.format = format
+            let out = folder.appendingPathComponent("density.\(format)")
+            try Pipeline.write(highDPI, to: out, recipe: highDPIRecipe)
+            let info = try Pipeline.sourceInfo(PageItem(url: out))
+            precondition(abs((info.dpiX ?? 0)-800) < 1 && abs((info.dpiY ?? 0)-800) < 1, "Output DPI metadata lost")
+        }
+        let pdfInfo = try Pipeline.sourceInfo(extracted[0])
+        precondition(abs((pdfInfo.dpiX ?? 0)-3.6) < 0.01 && abs((pdfInfo.dpiY ?? 0)-3.6) < 0.01, "Embedded PDF physical placement ignored")
+        var pdfDPI = Stage(.page); pdfDPI.settings.preservePhysical = true; pdfDPI.settings.targetDPI = 72
+        let physicalPDF = try Pipeline.render(extracted[0], recipe: Recipe(stages: [pdfDPI]), preview: false)
+        precondition(physicalPDF.logicalWidth == 80 && physicalPDF.logicalHeight == 40)
+        var normalize = Stage(.page); normalize.settings.sourceDPI = 300; normalize.settings.pageUnit = 1
+        normalize.settings.pageMode = 3; normalize.settings.pageWidth = 200; normalize.settings.pageHeight = 300
+        normalize.settings.marginLeft = 10; normalize.settings.marginRight = 20; normalize.settings.marginTop = 30; normalize.settings.marginBottom = 40
+        for fit in [0,1,2] {
+            normalize.settings.fitMode = fit
+            let result = try Pipeline.render(PageItem(url: source), recipe: Recipe(stages: [normalize]), preview: false)
+            precondition(result.image.width == 200 && result.image.height == 300)
+        }
+        let pageA = PageItem(url: source), pageB = PageItem(url: jpegURL), pageC = PageItem(url: bad)
+        var book = RecipeBook(); var a = book.recipe(for: pageA); a.stages[1].settings.brightness = 0.2; book.values[pageA] = a
+        precondition(book.recipe(for: pageB).stages[1].settings.brightness == 0, "Default pages share settings")
+        try book.apply(a, indices: PageRanges.indices("0001 - 0002", count: 3), pages: [pageA,pageB,pageC])
+        var b = book.recipe(for: pageB); b.stages[1].settings.gamma = 2; book.values[pageB] = b
+        precondition(book.recipe(for: pageA).stages[1].settings.gamma == 1 && book.recipe(for: pageC).stages[1].settings.gamma == 1, "Applied recipes remained linked")
+        let project = Project(pages: [pageA,pageB,pageC], recipes: book.values.map { Project.PageRecipe(page: $0.key, recipe: $0.value) })
+        let savedProject = try JSONDecoder().decode(Project.self, from: JSONEncoder().encode(project)).validated()
+        precondition(savedProject.recipes.count == 3)
+        do { _ = try PageRanges.indices("0000-9999", count: 3); fatalError("Invalid range accepted") } catch is ProcessingError { }
+        precondition(Recipe.standard().stages.last?.kind == .binary)
+        var unsafeLegacy = Settings(); unsafeLegacy.cleanup = 3; unsafeLegacy.binarization = 2
+        let migratedRecipe = try Recipe.legacy(unsafeLegacy)
+        precondition(migratedRecipe.stages.allSatisfy { $0.settings.cleanup == 0 && !$0.settings.edgeSmooth }, "Unsafe legacy morphology re-enabled")
+        _ = NSApplication.shared
+        let scroll = PaperScroll(frame: NSRect(x: 0,y: 0,width: 500,height: 400))
+        scroll.setPictures([NSImage(size: NSSize(width: 3000,height: 4000))]); scroll.layoutSubtreeIfNeeded(); scroll.command(.fit)
+        precondition(scroll.magnification > 0 && scroll.magnification < 1)
+        scroll.command(.actual); precondition(abs(scroll.magnification-1) < 0.001)
+        scroll.command(.zoomIn); precondition(scroll.magnification > 1)
+        scroll.contentView.scroll(to: NSPoint(x: 50,y: 100)); scroll.reflectScrolledClipView(scroll.contentView)
+        precondition(scroll.contentView.bounds.origin.x > 0 && scroll.contentView.bounds.origin.y > 0, "Native panning did not move the viewport")
+        scroll.setPictures([NSImage(size:NSSize(width:3000,height:4000)),NSImage(size:NSSize(width:2000,height:3000))])
+        precondition(scroll.paper.rectangles.count == 2 && scroll.paper.rectangles[1].minX > scroll.paper.rectangles[0].maxX)
+        scroll.command(.fit)
+        print("PASS: macOS ImageIO decode, transform, PNG/JPEG/TIFF round trips, presets, malformed input, 1-bit PNG/TIFF, advanced algorithms, legacy migration, PDF rendering/extraction/rotation and source cache, ordered repeated steps, per-page projects, physical DPI, canvas and native preview zoom/pan")
     }
 }

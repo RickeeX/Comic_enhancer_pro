@@ -21,6 +21,10 @@ enum Processor {
     }
     static func render(_ item: PageItem, settings: Settings, preview: Bool) throws -> Rendered {
         _ = try settings.validated()
+        let image = try sourceImage(item, preview: preview)
+        return try processCore(image, settings: settings)
+    }
+    static func sourceImage(_ item: PageItem, preview: Bool) throws -> CGImage {
         let date = (try? item.url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
         let key = "\(item.path)-\(date?.timeIntervalSince1970 ?? 0)" as NSString
         let image: CGImage
@@ -29,6 +33,10 @@ enum Processor {
             image = try item.pdfPage != nil ? PDFLoader.image(item, preview: preview) : decodeImage(item.url, preview: preview)
             if preview { previews.setObject(ImageBox(image), forKey: key, cost: image.width * image.height * 4) }
         }
+        return image
+    }
+    static func processCore(_ image: CGImage, settings: Settings) throws -> Rendered {
+        _ = try settings.validated()
         let iw = image.width, ih = image.height
         var rgba = [UInt8](repeating: 255, count: iw * ih * 4)
         let color = CGColorSpace(name: CGColorSpace.sRGB)!
@@ -43,7 +51,7 @@ enum Processor {
         var o = settings.core
         var ow: UInt32 = 0, oh: UInt32 = 0
         guard ce_dimensions(UInt32(iw), UInt32(ih), &o, &ow, &oh) == 0 else {
-            throw ProcessingError.message("输出超过 4000 万像素上限，请降低缩放比例。")
+            throw ProcessingError.message("输出超过 1 亿像素上限，请降低缩放比例。")
         }
         var output = [UInt8](repeating: 0, count: Int(ow) * Int(oh) * 4)
         let status = rgba.withUnsafeBufferPointer { src in
@@ -69,8 +77,8 @@ enum Processor {
             throw ProcessingError.message("无法读取图像：\(url.lastPathComponent)")
         }
         let width = w.intValue, height = h.intValue
-        guard width > 0, height > 0, width <= 40_000_000 / height else {
-            throw ProcessingError.message("单页图像上限为 4000 万像素。")
+        guard width > 0, height > 0, width <= 100_000_000 / height else {
+            throw ProcessingError.message("单页图像上限为 1 亿像素。")
         }
         let limit = preview ? min(1600, max(width, height)) : max(width, height)
         let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -81,7 +89,7 @@ enum Processor {
         }
         return image
     }
-    static func write(_ image: CGImage, to url: URL, settings: Settings) throws {
+    static func write(_ image: CGImage, to url: URL, settings: Settings, dpiX: Double? = nil, dpiY: Double? = nil) throws {
         let type = settings.format == "jpg" ? UTType.jpeg : settings.format == "tiff" ? UTType.tiff : UTType.png
         let data = NSMutableData()
         guard let dest = CGImageDestinationCreateWithData(data, type.identifier as CFString, 1, nil) else {
@@ -115,7 +123,12 @@ enum Processor {
             }
             export = gray
         }
-        CGImageDestinationAddImage(dest, export, [kCGImageDestinationLossyCompressionQuality: settings.quality] as CFDictionary)
+        var properties: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: settings.quality]
+        if let x = dpiX, let y = dpiY, x.isFinite, y.isFinite, x > 0, y > 0 {
+            properties[kCGImagePropertyDPIWidth] = x; properties[kCGImagePropertyDPIHeight] = y
+            properties[kCGImagePropertyTIFFDictionary] = [kCGImagePropertyTIFFXResolution: x, kCGImagePropertyTIFFYResolution: y, kCGImagePropertyTIFFResolutionUnit: 2]
+        }
+        CGImageDestinationAddImage(dest, export, properties as CFDictionary)
         guard CGImageDestinationFinalize(dest) else { throw ProcessingError.message("编码图像失败。") }
         try (data as Data).write(to: url, options: .atomic)
     }

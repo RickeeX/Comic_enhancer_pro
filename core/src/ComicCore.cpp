@@ -8,7 +8,7 @@
 #include <mutex>
 #include <exception>
 namespace {
-constexpr uint64_t maxPixels = 40000000;
+constexpr uint64_t maxPixels = 100000000;
 bool valid(const CEOptions &o) {
     auto in=[](float x,float a,float b){return std::isfinite(x)&&x>=a&&x<=b;};
     return in(o.brightness,-1,1)&&in(o.contrast,0,3)&&in(o.gamma,.2f,3)&&
@@ -116,3 +116,5 @@ extern "C" int ce_estimate_skew(const uint8_t*src,uint32_t w,uint32_t h,int32_t 
     if(uint64_t(w)*h>maxPixels)return -2;
     try{*degrees=estimate(src,w,h,vertical!=0,limit);return 0;}catch(...){return -4;}
 }
+
+#include "PageCore.hpp"

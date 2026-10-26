@@ -34,9 +34,42 @@ struct Settings: Codable, Equatable {
     var angle: Double = 0
 
 
+    var preservePhysical = false
+    var sourceDPI: Double = 0
+    var targetDPI: Double = 600
+    var pageMode = 0
+    var pageUnit = 0
+    var pageWidth: Double = 12
+    var pageHeight: Double = 15
+    var marginLeft: Double = 0
+    var marginRight: Double = 0
+    var marginTop: Double = 0
+    var marginBottom: Double = 0
+    var fitMode = 0
+    var alignX = 1
+    var alignY = 1
+    var alternateMargins = false
+    var cropLeft: Double = 0
+    var cropRight: Double = 0
+    var cropTop: Double = 0
+    var cropBottom: Double = 0
+    var autoTrim = false
+    var trimThreshold = 240
+    var trimIgnore = 0
+    var trimPadding = 2
+    var removeBorders = false
+    var despeckleDiameter = 0
+    var despeckleThreshold = 127
+    var edgeSmooth = false
+    var smoothPasses = 1
+    var fillNotches = false
+    var resampleMethod = 2
+    var flipHorizontal = false
+    var flipVertical = false
+
     init() {}
     private enum CodingKeys: String, CodingKey {
-        case brightness, contrast, gamma, whitePoint, sharpen, blur, scale, crop, grayscale, levels, autoLevels, rotation, page, format, quality, binarization, threshold, adaptiveRadius, sauvolaK, cleanup, cleanupPasses, dither, blurMethod, filterRadius, edgeSigma, sharpenMethod, sharpenThreshold, deskew, deskewLimit, angle
+        case brightness, contrast, gamma, whitePoint, sharpen, blur, scale, crop, grayscale, levels, autoLevels, rotation, page, format, quality, binarization, threshold, adaptiveRadius, sauvolaK, cleanup, cleanupPasses, dither, blurMethod, filterRadius, edgeSigma, sharpenMethod, sharpenThreshold, deskew, deskewLimit, angle, preservePhysical, sourceDPI, targetDPI, pageMode, pageUnit, pageWidth, pageHeight, marginLeft, marginRight, marginTop, marginBottom, fitMode, alignX, alignY, alternateMargins, cropLeft, cropRight, cropTop, cropBottom, autoTrim, trimThreshold, trimIgnore, trimPadding, removeBorders, despeckleDiameter, despeckleThreshold, edgeSmooth, smoothPasses, fillNotches, resampleMethod, flipHorizontal, flipVertical
     }
     init(from decoder: Decoder) throws {
         self.init()
@@ -71,6 +104,38 @@ struct Settings: Codable, Equatable {
         deskew = try c.decodeIfPresent(Int.self, forKey: .deskew) ?? deskew
         deskewLimit = try c.decodeIfPresent(Double.self, forKey: .deskewLimit) ?? deskewLimit
         angle = try c.decodeIfPresent(Double.self, forKey: .angle) ?? angle
+        preservePhysical = try c.decodeIfPresent(Bool.self, forKey: .preservePhysical) ?? preservePhysical
+        sourceDPI = try c.decodeIfPresent(Double.self, forKey: .sourceDPI) ?? sourceDPI
+        targetDPI = try c.decodeIfPresent(Double.self, forKey: .targetDPI) ?? targetDPI
+        pageMode = try c.decodeIfPresent(Int.self, forKey: .pageMode) ?? pageMode
+        pageUnit = try c.decodeIfPresent(Int.self, forKey: .pageUnit) ?? pageUnit
+        pageWidth = try c.decodeIfPresent(Double.self, forKey: .pageWidth) ?? pageWidth
+        pageHeight = try c.decodeIfPresent(Double.self, forKey: .pageHeight) ?? pageHeight
+        marginLeft = try c.decodeIfPresent(Double.self, forKey: .marginLeft) ?? marginLeft
+        marginRight = try c.decodeIfPresent(Double.self, forKey: .marginRight) ?? marginRight
+        marginTop = try c.decodeIfPresent(Double.self, forKey: .marginTop) ?? marginTop
+        marginBottom = try c.decodeIfPresent(Double.self, forKey: .marginBottom) ?? marginBottom
+        fitMode = try c.decodeIfPresent(Int.self, forKey: .fitMode) ?? fitMode
+        alignX = try c.decodeIfPresent(Int.self, forKey: .alignX) ?? alignX
+        alignY = try c.decodeIfPresent(Int.self, forKey: .alignY) ?? alignY
+        alternateMargins = try c.decodeIfPresent(Bool.self, forKey: .alternateMargins) ?? alternateMargins
+        cropLeft = try c.decodeIfPresent(Double.self, forKey: .cropLeft) ?? cropLeft
+        cropRight = try c.decodeIfPresent(Double.self, forKey: .cropRight) ?? cropRight
+        cropTop = try c.decodeIfPresent(Double.self, forKey: .cropTop) ?? cropTop
+        cropBottom = try c.decodeIfPresent(Double.self, forKey: .cropBottom) ?? cropBottom
+        autoTrim = try c.decodeIfPresent(Bool.self, forKey: .autoTrim) ?? autoTrim
+        trimThreshold = try c.decodeIfPresent(Int.self, forKey: .trimThreshold) ?? trimThreshold
+        trimIgnore = try c.decodeIfPresent(Int.self, forKey: .trimIgnore) ?? trimIgnore
+        trimPadding = try c.decodeIfPresent(Int.self, forKey: .trimPadding) ?? trimPadding
+        removeBorders = try c.decodeIfPresent(Bool.self, forKey: .removeBorders) ?? removeBorders
+        despeckleDiameter = try c.decodeIfPresent(Int.self, forKey: .despeckleDiameter) ?? despeckleDiameter
+        despeckleThreshold = try c.decodeIfPresent(Int.self, forKey: .despeckleThreshold) ?? despeckleThreshold
+        edgeSmooth = try c.decodeIfPresent(Bool.self, forKey: .edgeSmooth) ?? edgeSmooth
+        smoothPasses = try c.decodeIfPresent(Int.self, forKey: .smoothPasses) ?? smoothPasses
+        fillNotches = try c.decodeIfPresent(Bool.self, forKey: .fillNotches) ?? fillNotches
+        resampleMethod = try c.decodeIfPresent(Int.self, forKey: .resampleMethod) ?? resampleMethod
+        flipHorizontal = try c.decodeIfPresent(Bool.self, forKey: .flipHorizontal) ?? flipHorizontal
+        flipVertical = try c.decodeIfPresent(Bool.self, forKey: .flipVertical) ?? flipVertical
     }
 
     func validated() throws -> Settings {
@@ -88,6 +153,19 @@ struct Settings: Codable, Equatable {
               (1...100).contains(edgeSigma), (0...1).contains(sharpenMethod),
               (0...255).contains(sharpenThreshold), (0...2).contains(deskew),
               (1...10).contains(deskewLimit), (-15...15).contains(angle) else { throw ProcessingError.message("参数文件包含超出范围的值。") }
+        let geometry = [sourceDPI, targetDPI, pageWidth, pageHeight, marginLeft, marginRight, marginTop, marginBottom, cropLeft, cropRight, cropTop, cropBottom]
+        guard geometry.allSatisfy({ $0.isFinite }), (sourceDPI == 0 || (36...2400).contains(sourceDPI)),
+              (36...2400).contains(targetDPI), (0.01...100000).contains(pageWidth), (0.01...100000).contains(pageHeight),
+              [marginLeft, marginRight, marginTop, marginBottom].allSatisfy({ (0...10000).contains($0) }),
+              [cropLeft, cropRight, cropTop, cropBottom].allSatisfy({ (0...0.49).contains($0) }),
+              cropLeft + cropRight < 0.95, cropTop + cropBottom < 0.95,
+              (0...4).contains(pageMode), (0...1).contains(pageUnit), (0...2).contains(fitMode),
+              (0...2).contains(alignX), (0...2).contains(alignY), (0...254).contains(trimThreshold),
+              (0...128).contains(trimIgnore), (0...200).contains(trimPadding),
+              (0...128).contains(despeckleDiameter), (0...254).contains(despeckleThreshold),
+              (1...3).contains(smoothPasses), (0...2).contains(resampleMethod) else {
+            throw ProcessingError.message("页面或去斑参数超出范围。")
+        }
         return self
     }
     var core: CEOptions {

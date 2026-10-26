@@ -43,11 +43,32 @@ CEOptions ce_defaults(void);
 int ce_estimate_skew(const uint8_t *src, uint32_t width, uint32_t height,
                      int32_t vertical, float limit, float *degrees);
 /* Returns 0 on success; -1 invalid args, -2 dimensions/resource limit,
-   -3 insufficient destination capacity, -4 allocation failure. Max 40 MP. */
+   -3 insufficient destination capacity, -4 allocation failure. Max 100 MP. */
 int ce_dimensions(uint32_t width, uint32_t height, const CEOptions *options,
                   uint32_t *out_width, uint32_t *out_height);
 int ce_process(const uint8_t *src, uint32_t width, uint32_t height,
                const CEOptions *options, uint8_t *dst, size_t capacity);
+/* Native RGBA canvas/resampling; rect is top-left x,y,width,height in output pixels.
+   method: 0 nearest, 1 bilinear, 2 bicubic. The uncovered canvas is white. */
+int ce_canvas(const uint8_t *src, uint32_t width, uint32_t height,
+              uint32_t out_width, uint32_t out_height, const float rect[4],
+              int32_t method, uint8_t *dst, size_t capacity);
+/* Connected components are 8-connected. Remove only components whose bounding
+   width AND height are <= diameter. diameter=0 disables speckle removal.
+   remove_edges is a separate optional border-connected foreground removal. */
+int ce_despeckle(uint8_t *pixels, uint32_t width, uint32_t height,
+                 int32_t diameter, int32_t threshold, int32_t remove_edges);
+/* Conservative rotated 3x3 hit/miss templates; retains thin endpoints.
+   Input must be opaque binary RGBA. fill_notches optionally repairs concavities. */
+int ce_smooth_binary(uint8_t *pixels, uint32_t width, uint32_t height,
+                     int32_t passes, int32_t fill_notches);
+/* Bounds of foreground components, ignoring components no larger than diameter.
+   Empty foreground returns the whole input. rect: x,y,width,height. */
+int ce_content_bounds(const uint8_t *pixels, uint32_t width, uint32_t height,
+                      int32_t threshold, int32_t ignore_diameter, uint32_t rect[4]);
+int ce_mirror(const uint8_t *src, uint32_t width, uint32_t height, int32_t horizontal,
+              int32_t vertical, uint8_t *dst, size_t capacity);
+int ce_invert(uint8_t *pixels, uint32_t width, uint32_t height);
 #ifdef __cplusplus
 }
 #endif
