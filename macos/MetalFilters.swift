@@ -74,7 +74,8 @@ final class MetalFilters {
         lock.lock();defer { lock.unlock() }
         return choices.sorted{$0.key<$1.key}.map{"\($0.key)=\($0.value ? "Metal":"CPU")"}.joined(separator:", ")
     }
-    func automatic(_ source:GrayPlane,blur:Settings,usm:Settings,workspace:GrayWorkspace) throws -> GrayPlane? {
+    @inline(never)
+    func automatic(_ source:GrayPlane,blur:Settings,usm:Settings,workspace:GrayWorkspace) -> GrayPlane? {
         guard source.width*source.height>=4_000_000 else { return nil }
         let key="\(ce_get_thread_budget())-\(source.width*source.height>=16_000_000)-\(blur.filterRadius)-\(usm.filterRadius)"
         lock.lock()
@@ -87,7 +88,7 @@ final class MetalFilters {
         // Calibrate on this device and page size. The CPU output also supplies
         // an exact fallback without recomputing the first candidate pair.
         let start=Date()
-        guard let first=try source.process(blur,workspace:workspace),let cpu=try first.process(usm,workspace:workspace) else { choices[key]=false;return nil }
+        guard let first=try? source.process(blur,workspace:workspace),let cpu=try? first.process(usm,workspace:workspace) else { choices[key]=false;return nil }
         let cpuTime=Date().timeIntervalSince(start)
         do {
             if !validated { try validate();validated=true }

@@ -39,7 +39,7 @@ struct AccelerationBenchmark {
         }
         guard maximumDifference==0 else { fatalError("Production Metal changed filter pixels") }
         let workspace=try GrayWorkspace()
-        if let result=try metal.automatic(plane,blur:blur,usm:usm,workspace:workspace) {
+        if let result=metal.automatic(plane,blur:blur,usm:usm,workspace:workspace) {
             guard result.data as Data == Data(reference) else { fatalError("Automatic backend changed pixels") }
         }
         print(String(format:"17.78 MP Metal Gaussian+USM: %.1f ms including upload/allocation/download/LUT; max channel difference=%d; device=%@",samples.reduce(0,+)/Double(samples.count),maximumDifference,metal.device.name))

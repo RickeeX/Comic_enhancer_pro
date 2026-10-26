@@ -100,7 +100,7 @@ enum Pipeline {
                 blur.blur=stage.settings.blur;blur.filterRadius=max(1,Int((Double(stage.settings.filterRadius)*ratio).rounded()))
                 usm.sharpen=stages[index+1].settings.sharpen;usm.sharpenThreshold=stages[index+1].settings.sharpenThreshold
                 usm.filterRadius=max(1,Int((Double(stages[index+1].settings.filterRadius)*ratio).rounded()))
-                if let result=try autoreleasepool(invoking:{try metal.automatic(gray,blur:blur,usm:usm,workspace:workspace)}) {
+                if let result=autoreleasepool(invoking:{metal.automatic(gray,blur:blur,usm:usm,workspace:workspace)}) {
                     f.gray=result;if f.grayLevels>=0 { f.grayLevels=0 };index += 2;continue
                 }
             }

@@ -1,5 +1,5 @@
 name: Diagnose ARM batch safety
-# Diagnostic revision: raw-byte comparison, debug symbols.
+# Diagnostic revision: nonthrowing best-effort backend selection.
 on:
   workflow_dispatch:
   push:
@@ -19,10 +19,10 @@ jobs:
           import subprocess,os
           from pathlib import Path
           os.environ['COMIC_TRACE_BATCH']='1'
-          r=subprocess.run(['lldb','--batch','-o','run','-k','thread backtrace all','--','.build/macos-tests','--benchmark-batch'],text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=150)
+          r=subprocess.run(['lldb','--batch','-o','run','-k','thread backtrace all','-k','frame select 1','-k','disassemble --frame --mixed','-k','register read x0 x19 x20 x21 x22 x23 x24 x25 x26 x27 x28','--','.build/macos-tests','--benchmark-batch'],text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=150)
           Path('.build/batch-backtrace.log').write_text(r.stdout)
           lines=r.stdout.splitlines()
-          starts=[i for i,line in enumerate(lines) if 'frame #0' in line or 'frame #10' in line or 'frame #20' in line]
+          starts=[i for i,line in enumerate(lines) if 'frame #0' in line or 'frame #10' in line or 'frame #20' in line or '-> ' in line]
           for i in starts[:12]:
               chunk='\n'.join(lines[max(0,i-1):i+15])[:3500].replace('%','%25').replace('\n','%0A')
               print(f'::notice title=Batch debugger stack::{chunk}')
