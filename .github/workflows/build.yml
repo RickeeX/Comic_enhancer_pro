@@ -113,6 +113,13 @@ jobs:
           for line in Path('.build/batch-performance.log').read_text().splitlines():
               print(f'::notice title=Bounded batch comparison::{line}')
           PYCODE
+      - name: Swift and C buffer lifetime stress
+        if: matrix.os == 'macos-15'
+        shell: bash
+        run: |
+          set -euo pipefail
+          COMIC_SANITIZE=1 ./scripts/test-macos.sh 2>&1 | tee .build/swift-asan.log
+          .build/macos-tests --benchmark-batch 2>&1 | tee .build/batch-asan.log
       - name: Universal app build
         shell: bash
         run: |
@@ -148,7 +155,7 @@ jobs:
                   continue
               lines = log.read_text().splitlines()
               positions = [i for i, line in enumerate(lines) if 'error:' in line.lower() or 'fatal error' in line.lower() or 'assertion failed' in line.lower()]
-              chunks = ['\n'.join(lines[max(0, i-1):i+4]) for i in positions[:16]]
+              chunks = ['\n'.join(lines[max(0, i-1):i+(24 if 'AddressSanitizer' in lines[i] else 4)]) for i in positions[:16]]
               if not chunks:
                   chunks = ['\n'.join(lines[-30:])]
               for index, text in enumerate(chunks):
