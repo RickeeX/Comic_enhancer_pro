@@ -9,8 +9,11 @@ private final class Cancellation: @unchecked Sendable {
     var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return stopped }
 }
 final class Model: ObservableObject {
-    @Published var files: [URL] = []
-    @Published var selection: URL?
+    @Published var files: [PageItem] = []
+    @Published var selection: PageItem?
+    @Published var pdfMode = 0
+    @Published var pdfDPI = 200
+    @Published var importing = false
     @Published var settings = Settings()
     @Published var original: NSImage?
     @Published var enhanced: NSImage?
@@ -22,47 +25,60 @@ final class Model: ObservableObject {
     @Published var status = "导入扫描页，开始修复你的漫画。"
     @Published var error: String?
     private let queue = DispatchQueue(label: "comic.processing", qos: .userInitiated)
+    private var previewCancellation = Cancellation()
     private var previewWork: DispatchWorkItem?
     private var generation = UUID()
     private var cancellation = Cancellation()
 
     func addFiles() {
+        guard !busy && !importing else { return }
         let panel = NSOpenPanel()
         panel.canChooseFiles = true; panel.canChooseDirectories = true; panel.allowsMultipleSelection = true
-        panel.message = "选择图片或文件夹；文件夹中的图片会递归导入。"
+        panel.message = "选择图片、PDF 或文件夹；PDF 按左下方选定方式导入。"
         guard panel.runModal() == .OK else { return }
         let urls = panel.urls
-        status = "正在扫描文件…"
+        status = "正在建立页面索引…"; importing = true
+        let embedded = pdfMode == 1, dpi = pdfDPI
         queue.async {
-            var found: [URL] = []
+            var found: [PageItem] = [], errors: [String] = []
+            func append(_ file: URL) {
+                do {
+                    if file.pathExtension.lowercased() == "pdf" { found += try PDFLoader.items(file, embedded: embedded, dpi: dpi) }
+                    else if Processor.extensions.contains(file.pathExtension.lowercased()) { found.append(PageItem(url: file)) }
+                } catch { errors.append(error.localizedDescription) }
+            }
             for url in urls {
                 var isDir: ObjCBool = false
                 if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
                     if let iterator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey], options: [.skipsHiddenFiles, .skipsPackageDescendants]) {
                         for case let file as URL in iterator {
                             let values = try? file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-                            if values?.isRegularFile == true && values?.isSymbolicLink != true && Processor.extensions.contains(file.pathExtension.lowercased()) { found.append(file) }
+                            if values?.isRegularFile == true && values?.isSymbolicLink != true { append(file) }
                         }
                     }
-                } else if Processor.extensions.contains(url.pathExtension.lowercased()) { found.append(url) }
+                } else { append(url) }
             }
-            let imported = found
+            let imported = found, issues = errors
             DispatchQueue.main.async {
-                self.files = Array(Set(self.files + imported)).sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+                self.files = Array(Set(self.files + imported)).sorted { $0.sortKey.localizedStandardCompare($1.sortKey) == .orderedAscending }
                 if self.selection == nil { self.selection = self.files.first }
+                self.importing = false
                 self.status = "已导入 \(self.files.count) 页"
+                if !issues.isEmpty { self.error = issues.prefix(5).joined(separator: "\n") }
             }
         }
     }
     func preview() {
-        previewWork?.cancel(); generation = UUID()
+        previewWork?.cancel(); previewCancellation.cancel(); generation = UUID()
+        let cancel = Cancellation(); previewCancellation = cancel
         let token = generation
-        guard let url = selection else { original = nil; enhanced = nil; return }
+        guard let url = selection else { original = nil; enhanced = nil; previewing = false; return }
         let options = settings
         previewing = true
         let work = DispatchWorkItem {
-            // The serial queue bounds memory; generation rejects outdated results.
-            let result = Result { try Processor.render(url, settings: options, preview: true) }
+            guard !cancel.isCancelled else { return }
+            let result = Result { try autoreleasepool { try Processor.render(url, settings: options, preview: true) } }
+            guard !cancel.isCancelled else { return }
             DispatchQueue.main.async {
                 guard self.generation == token else { return }
                 self.previewing = false
@@ -110,7 +126,7 @@ final class Model: ObservableObject {
                 autoreleasepool {
                     do {
                         let value = try Processor.render(url, settings: options, preview: false)
-                        let name = String(format: "%05d_", index + 1) + url.deletingPathExtension().lastPathComponent + "." + options.format
+                        let name = String(format: "%05d_", index + 1) + url.exportStem + "." + options.format
                         try Processor.write(value.enhanced, to: folder.appendingPathComponent(name), settings: options)
                         succeeded += 1
                         log += "OK\t\(url.path)\t\(name)\n"

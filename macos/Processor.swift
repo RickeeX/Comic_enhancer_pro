@@ -12,24 +12,22 @@ struct Rendered {
 }
 enum Processor {
     static let extensions: Set<String> = ["jpg", "jpeg", "png", "tif", "tiff", "bmp", "gif", "heic", "heif"]
+    private final class ImageBox { let image: CGImage; init(_ image: CGImage) { self.image = image } }
+    private static let previews: NSCache<NSString, ImageBox> = {
+        let cache = NSCache<NSString, ImageBox>(); cache.totalCostLimit = 128 * 1024 * 1024; return cache
+    }()
     static func render(_ url: URL, settings: Settings, preview: Bool) throws -> Rendered {
+        try render(PageItem(url: url), settings: settings, preview: preview)
+    }
+    static func render(_ item: PageItem, settings: Settings, preview: Bool) throws -> Rendered {
         _ = try settings.validated()
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-              let w = props[kCGImagePropertyPixelWidth] as? NSNumber,
-              let h = props[kCGImagePropertyPixelHeight] as? NSNumber else {
-            throw ProcessingError.message("无法读取图像：\(url.lastPathComponent)")
-        }
-        let width = w.intValue, height = h.intValue
-        guard width > 0, height > 0, width <= 40_000_000 / height else {
-            throw ProcessingError.message("单页图像上限为 4000 万像素。")
-        }
-        let limit = preview ? min(1600, max(width, height)) : max(width, height)
-        let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: limit, kCGImageSourceShouldCacheImmediately: true]
-        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
-            throw ProcessingError.message("此图像无法解码。")
+        let date = (try? item.url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        let key = "\(item.path)-\(date?.timeIntervalSince1970 ?? 0)" as NSString
+        let image: CGImage
+        if preview, let cached = previews.object(forKey: key) { image = cached.image }
+        else {
+            image = try item.pdfPage != nil ? PDFLoader.image(item, preview: preview) : decodeImage(item.url, preview: preview)
+            if preview { previews.setObject(ImageBox(image), forKey: key, cost: image.width * image.height * 4) }
         }
         let iw = image.width, ih = image.height
         var rgba = [UInt8](repeating: 255, count: iw * ih * 4)
@@ -62,6 +60,26 @@ enum Processor {
             throw ProcessingError.message("无法创建输出图像。")
         }
         return Rendered(original: image, enhanced: result)
+    }
+    private static func decodeImage(_ url: URL, preview: Bool) throws -> CGImage {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let w = props[kCGImagePropertyPixelWidth] as? NSNumber,
+              let h = props[kCGImagePropertyPixelHeight] as? NSNumber else {
+            throw ProcessingError.message("无法读取图像：\(url.lastPathComponent)")
+        }
+        let width = w.intValue, height = h.intValue
+        guard width > 0, height > 0, width <= 40_000_000 / height else {
+            throw ProcessingError.message("单页图像上限为 4000 万像素。")
+        }
+        let limit = preview ? min(1600, max(width, height)) : max(width, height)
+        let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: limit, kCGImageSourceShouldCacheImmediately: true]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            throw ProcessingError.message("此图像无法解码。")
+        }
+        return image
     }
     static func write(_ image: CGImage, to url: URL, settings: Settings) throws {
         let type = settings.format == "jpg" ? UTType.jpeg : settings.format == "tiff" ? UTType.tiff : UTType.png

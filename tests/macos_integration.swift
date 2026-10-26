@@ -4,6 +4,28 @@ import ImageIO
 
 @main
 struct IntegrationTests {
+    static func pdfFixture(_ url: URL) throws {
+        let content = "q 80 0 0 40 24 60 cm /Im1 Do Q\n1 0 0 rg 10 180 30 20 re f\n"
+        let pixels: [UInt8] = [0,0,0, 255,255,255, 255,0,0, 0,255,0, 0,0,255, 120,120,120, 200,200,200, 255,255,255]
+        var objects: [Data] = [
+            Data("<< /Type /Catalog /Pages 2 0 R >>".utf8),
+            Data("<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 /MediaBox [0 0 144 216] /Resources << /XObject << /Im1 6 0 R >> >> >>".utf8),
+            Data("<< /Type /Page /Parent 2 0 R /Contents 5 0 R >>".utf8),
+            Data("<< /Type /Page /Parent 2 0 R /Rotate 90 /Contents 5 0 R >>".utf8),
+            Data("<< /Length \(content.utf8.count) >>\nstream\n\(content)endstream".utf8)
+        ]
+        var image = Data("<< /Type /XObject /Subtype /Image /Width 4 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length 24 >>\nstream\n".utf8)
+        image.append(contentsOf: pixels); image.append(Data("\nendstream".utf8)); objects.append(image)
+        var pdf = Data("%PDF-1.4\n".utf8), offsets = [0]
+        for (index, object) in objects.enumerated() {
+            offsets.append(pdf.count); pdf.append(Data("\(index + 1) 0 obj\n".utf8)); pdf.append(object); pdf.append(Data("\nendobj\n".utf8))
+        }
+        let xref = pdf.count
+        pdf.append(Data("xref\n0 \(objects.count + 1)\n0000000000 65535 f \n".utf8))
+        for offset in offsets.dropFirst() { pdf.append(Data(String(format: "%010d 00000 n \n", offset).utf8)) }
+        pdf.append(Data("trailer\n<< /Size \(objects.count + 1) /Root 1 0 R >>\nstartxref\n\(xref)\n%%EOF\n".utf8))
+        try pdf.write(to: url)
+    }
     static func main() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
@@ -73,6 +95,30 @@ struct IntegrationTests {
         try Data([1,2,3]).write(to: bad)
         do { _ = try Processor.render(bad, settings: Settings(), preview: false); fatalError("Broken input accepted") }
         catch is ProcessingError { }
-        print("PASS: macOS ImageIO decode, transform, PNG/JPEG/TIFF round trips, presets, malformed input, 1-bit PNG/TIFF, advanced algorithms and legacy migration")
+        let pdfURL = folder.appendingPathComponent("book.pdf")
+        try pdfFixture(pdfURL)
+        let pages = try PDFLoader.items(pdfURL, embedded: false, dpi: 144)
+        precondition(pages.count == 2 && pages[0].pdfPage == 1 && pages[1].pdfPage == 2)
+        let pageOne = try Processor.render(pages[0], settings: Settings(), preview: false)
+        let pageTwo = try Processor.render(pages[1], settings: Settings(), preview: false)
+        precondition(pageOne.original.width == 288 && pageOne.original.height == 432)
+        precondition(pageTwo.original.width == 432 && pageTwo.original.height == 288, "PDF page rotation ignored")
+        let extracted = try PDFLoader.items(pdfURL, embedded: true, dpi: 200)
+        precondition(extracted.count == 2, "Inherited PDF resources not found")
+        let embedded = try Processor.render(extracted[0], settings: Settings(), preview: false)
+        precondition(embedded.original.width == 4 && embedded.original.height == 2, "Embedded image was rasterized at PDF DPI")
+        let embeddedBytes = embedded.enhanced.dataProvider!.data! as Data
+        precondition(embeddedBytes[0] == 0 && embeddedBytes[4] == 255, "Raw RGB extraction changed image data")
+        let cached = try Processor.render(pages[0], settings: Settings(), preview: true)
+        precondition(cached.original.width == 288)
+        var changed = Settings(); changed.brightness = 0.25
+        let reused = try Processor.render(pages[0], settings: changed, preview: true)
+        precondition(cached.original === reused.original, "Preview source was decoded again for a settings change")
+        precondition(reused.enhanced.dataProvider!.data! as Data != cached.enhanced.dataProvider!.data! as Data)
+        do { _ = try PDFLoader.items(pdfURL, embedded: false, dpi: 0); fatalError("Invalid PDF DPI accepted") }
+        catch is ProcessingError { }
+        do { _ = try PDFLoader.image(PageItem(url: pdfURL, pdfPage: 999), preview: false); fatalError("Invalid PDF page accepted") }
+        catch is ProcessingError { }
+        print("PASS: macOS ImageIO decode, transform, PNG/JPEG/TIFF round trips, presets, malformed input, 1-bit PNG/TIFF, advanced algorithms, legacy migration, PDF rendering/extraction/rotation and source cache")
     }
 }
