@@ -260,8 +260,8 @@ struct IntegrationTests {
         scanContext.setFillColor(CGColor(gray:1,alpha:1));scanContext.fill(CGRect(x:0,y:0,width:2400,height:3600))
         scanContext.setFillColor(CGColor(gray:0,alpha:1));scanContext.fill(CGRect(x:400,y:600,width:1600,height:2400))
         let scanJPEG = folder.appendingPathComponent("scan.jpg")
-        var jpegSettings = Settings();jpegSettings.format = "jpg"
-        try Processor.write(scanContext.makeImage()!,to:scanJPEG,settings:jpegSettings)
+        var scanJPEGSettings = Settings();scanJPEGSettings.format = "jpg"
+        try Processor.write(scanContext.makeImage()!,to:scanJPEG,settings:scanJPEGSettings)
         let scanPDF = folder.appendingPathComponent("embedded-scan.pdf")
         try pdfFixture(scanPDF,jpeg:Data(contentsOf:scanJPEG),jpegWidth:2400,jpegHeight:3600,placement:CGSize(width:576,height:864))
         let scanItem = try PDFLoader.items(scanPDF,embedded:true,dpi:200)[0]
