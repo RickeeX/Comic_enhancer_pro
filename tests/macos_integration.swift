@@ -4,12 +4,12 @@ import ImageIO
 
 @main
 struct IntegrationTests {
-    static func pdfFixture(_ url: URL, jpeg: Data? = nil, decode: String? = nil) throws {
-        let content = "q 80 0 0 40 24 60 cm /Im1 Do Q\n1 0 0 rg 10 180 30 20 re f\n"
+    static func pdfFixture(_ url: URL, jpeg: Data? = nil, decode: String? = nil, pageScale: Int = 1) throws {
+        let content = "q \(pageScale) 0 0 \(pageScale) 0 0 cm\nq 80 0 0 40 24 60 cm /Im1 Do Q\n1 0 0 rg 10 180 30 20 re f\nQ\n"
         let pixels: [UInt8] = [0,0,0, 255,255,255, 255,0,0, 0,255,0, 0,0,255, 120,120,120, 200,200,200, 255,255,255]
         var objects: [Data] = [
             Data("<< /Type /Catalog /Pages 2 0 R >>".utf8),
-            Data("<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 /MediaBox [0 0 144 216] /Resources << /XObject << /Im1 6 0 R >> >> >>".utf8),
+            Data("<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 /MediaBox [0 0 \(144*pageScale) \(216*pageScale)] /Resources << /XObject << /Im1 6 0 R >> >> >>".utf8),
             Data("<< /Type /Page /Parent 2 0 R /Contents 5 0 R >>".utf8),
             Data("<< /Type /Page /Parent 2 0 R /Rotate 90 /Contents 5 0 R >>".utf8),
             Data("<< /Length \(content.utf8.count) >>\nstream\n\(content)endstream".utf8)
@@ -27,6 +27,25 @@ struct IntegrationTests {
         for offset in offsets.dropFirst() { pdf.append(Data(String(format: "%010d 00000 n \n", offset).utf8)) }
         pdf.append(Data("trailer\n<< /Size \(objects.count + 1) /Root 1 0 R >>\nstartxref\n\(xref)\n%%EOF\n".utf8))
         try pdf.write(to: url)
+    }
+    static func inkBounds(_ image: CGImage) throws -> CGRect {
+        let pixels = try Pipeline.rgba(image)
+        var x0 = image.width, y0 = image.height, x1 = -1, y1 = -1
+        for y in 0..<image.height { for x in 0..<image.width {
+            let i = (y*image.width+x)*4
+            if min(pixels[i],min(pixels[i+1],pixels[i+2])) < 128 {
+                x0 = min(x0,x);x1 = max(x1,x);y0 = min(y0,y);y1 = max(y1,y)
+            }
+        } }
+        precondition(x1 >= x0 && y1 >= y0,"Test document lost all content")
+        return CGRect(x:Double(x0)/Double(image.width),y:Double(y0)/Double(image.height),
+            width:Double(x1-x0+1)/Double(image.width),height:Double(y1-y0+1)/Double(image.height))
+    }
+    static func sameInkGeometry(_ a: CGImage, _ b: CGImage, message: String) throws {
+        let x = try inkBounds(a), y = try inkBounds(b)
+        let tolerance = 2.0 / Double(min(a.width,a.height,b.width,b.height))
+        precondition(abs(x.minX-y.minX) < tolerance && abs(x.minY-y.minY) < tolerance && abs(x.width-y.width) < tolerance && abs(x.height-y.height) < tolerance,
+            message + ": normalized content bounds \(x) versus \(y)")
     }
     static func main() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -104,6 +123,23 @@ struct IntegrationTests {
         let pageOne = try Processor.render(pages[0], settings: Settings(), preview: false)
         let pageTwo = try Processor.render(pages[1], settings: Settings(), preview: false)
         precondition(pageOne.original.width == 288 && pageOne.original.height == 432)
+        let page72 = try PDFLoader.image(PageItem(url:pdfURL,pdfPage:1,dpi:72),preview:false)
+        try sameInkGeometry(page72,pageOne.original,message:"Increasing PDF render DPI enlarged only the canvas")
+        let bigPDF = folder.appendingPathComponent("large-point-scan.pdf")
+        try pdfFixture(bigPDF,pageScale:8)
+        let bigItem = PageItem(url:bigPDF,pdfPage:1,dpi:100)
+        let bigThumbnail = try PDFLoader.image(bigItem,preview:true)
+        let bigFull = try PDFLoader.image(bigItem,preview:false)
+        try sameInkGeometry(bigThumbnail,bigFull,message:"Full-size PDF content shrank relative to the thumbnail")
+        var dpi400 = Stage(.resize);dpi400.settings.preservePhysical = true;dpi400.settings.targetDPI = 400
+        let resizedPDF = try Pipeline.render(pages[0],recipe:Recipe(stages:[dpi400]),preview:false)
+        precondition(resizedPDF.image.width == 800 && resizedPDF.image.height == 1200)
+        try sameInkGeometry(page72,resizedPDF.image,message:"400 DPI resampling centered an unscaled source in a larger page")
+        let dpi400URL = folder.appendingPathComponent("pdf-resampled-400.png")
+        try Pipeline.write(resizedPDF,to:dpi400URL,recipe:Recipe(stages:[dpi400]))
+        let reloaded400 = try Processor.sourceImage(PageItem(url:dpi400URL),preview:false)
+        try sameInkGeometry(page72,reloaded400,message:"Exported 400 DPI content has extra whitespace")
+
         let raster = pageOne.enhanced.dataProvider!.data! as Data
         var redCount = 0, blackCount = 0
         for i in stride(from: 0, to: raster.count, by: 4) {
