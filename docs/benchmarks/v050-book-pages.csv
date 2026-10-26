@@ -1,0 +1,716 @@
+file,trial,backend,stage,ms
+page-150-000,0,Gray8 CPU,normalize,1.76873
+page-150-000,0,Gray8 CPU,resize,25.1008
+page-150-000,0,Gray8 CPU,tone,3.90432
+page-150-000,0,Gray8 CPU,gaussian,34.4651
+page-150-000,0,Gray8 CPU,usm,44.0212
+page-150-000,0,Gray8 CPU,sauvola,52.0474
+page-150-000,0,Gray8 CPU,smooth_with_copies,31.9791
+page-150-000,0,v0.4.2,resize,104.333
+page-150-000,0,v0.4.2,tone,21.4268
+page-150-000,0,v0.4.2,gaussian,207.98
+page-150-000,0,v0.4.2,usm,200.614
+page-150-000,0,v0.4.2,sauvola,108.466
+page-150-000,0,v0.4.2,smooth_with_copies,88.5994
+page-150-000,1,v0.4.2,resize,105.815
+page-150-000,1,v0.4.2,tone,25.0729
+page-150-000,1,v0.4.2,gaussian,207.431
+page-150-000,1,v0.4.2,usm,204.806
+page-150-000,1,v0.4.2,sauvola,116.026
+page-150-000,1,v0.4.2,smooth_with_copies,88.8999
+page-150-000,1,Gray8 CPU,normalize,1.71191
+page-150-000,1,Gray8 CPU,resize,34.5331
+page-150-000,1,Gray8 CPU,tone,4.91744
+page-150-000,1,Gray8 CPU,gaussian,36.5424
+page-150-000,1,Gray8 CPU,usm,37.7809
+page-150-000,1,Gray8 CPU,sauvola,37.0192
+page-150-000,1,Gray8 CPU,smooth_with_copies,29.9928
+page-150-000,2,Gray8 CPU,normalize,1.90154
+page-150-000,2,Gray8 CPU,resize,46.3536
+page-150-000,2,Gray8 CPU,tone,4.24129
+page-150-000,2,Gray8 CPU,gaussian,34.3516
+page-150-000,2,Gray8 CPU,usm,35.2534
+page-150-000,2,Gray8 CPU,sauvola,36.0231
+page-150-000,2,Gray8 CPU,smooth_with_copies,35.7477
+page-150-000,2,v0.4.2,resize,105.216
+page-150-000,2,v0.4.2,tone,25.1433
+page-150-000,2,v0.4.2,gaussian,214.65
+page-150-000,2,v0.4.2,usm,195.039
+page-150-000,2,v0.4.2,sauvola,108.874
+page-150-000,2,v0.4.2,smooth_with_copies,87.6604
+page-150-000,3,v0.4.2,resize,103.608
+page-150-000,3,v0.4.2,tone,17.218
+page-150-000,3,v0.4.2,gaussian,209.948
+page-150-000,3,v0.4.2,usm,201.559
+page-150-000,3,v0.4.2,sauvola,117.214
+page-150-000,3,v0.4.2,smooth_with_copies,88.4443
+page-150-000,3,Gray8 CPU,normalize,1.88353
+page-150-000,3,Gray8 CPU,resize,36.1396
+page-150-000,3,Gray8 CPU,tone,5.31055
+page-150-000,3,Gray8 CPU,gaussian,39.488
+page-150-000,3,Gray8 CPU,usm,36.0441
+page-150-000,3,Gray8 CPU,sauvola,41.0264
+page-150-000,3,Gray8 CPU,smooth_with_copies,31.504
+page-150-000,4,Gray8 CPU,normalize,2.39025
+page-150-000,4,Gray8 CPU,resize,31.9373
+page-150-000,4,Gray8 CPU,tone,4.53685
+page-150-000,4,Gray8 CPU,gaussian,32.6433
+page-150-000,4,Gray8 CPU,usm,36.1132
+page-150-000,4,Gray8 CPU,sauvola,35.4642
+page-150-000,4,Gray8 CPU,smooth_with_copies,30.1725
+page-150-000,4,v0.4.2,resize,85.1519
+page-150-000,4,v0.4.2,tone,20.6499
+page-150-000,4,v0.4.2,gaussian,218.506
+page-150-000,4,v0.4.2,usm,201.5
+page-150-000,4,v0.4.2,sauvola,106.545
+page-150-000,4,v0.4.2,smooth_with_copies,93.3179
+page-151-001,0,Gray8 CPU,normalize,2.13275
+page-151-001,0,Gray8 CPU,resize,37.2725
+page-151-001,0,Gray8 CPU,tone,5.49662
+page-151-001,0,Gray8 CPU,gaussian,36.7383
+page-151-001,0,Gray8 CPU,usm,38.1984
+page-151-001,0,Gray8 CPU,sauvola,46.0345
+page-151-001,0,Gray8 CPU,smooth_with_copies,32.8169
+page-151-001,0,v0.4.2,resize,122.929
+page-151-001,0,v0.4.2,tone,25.3802
+page-151-001,0,v0.4.2,gaussian,225.705
+page-151-001,0,v0.4.2,usm,207.565
+page-151-001,0,v0.4.2,sauvola,111.645
+page-151-001,0,v0.4.2,smooth_with_copies,95.8832
+page-151-001,1,v0.4.2,resize,117.01
+page-151-001,1,v0.4.2,tone,25.1767
+page-151-001,1,v0.4.2,gaussian,219.31
+page-151-001,1,v0.4.2,usm,203.452
+page-151-001,1,v0.4.2,sauvola,115.071
+page-151-001,1,v0.4.2,smooth_with_copies,88.8789
+page-151-001,1,Gray8 CPU,normalize,2.07443
+page-151-001,1,Gray8 CPU,resize,35.7463
+page-151-001,1,Gray8 CPU,tone,5.41519
+page-151-001,1,Gray8 CPU,gaussian,34.4673
+page-151-001,1,Gray8 CPU,usm,37.0536
+page-151-001,1,Gray8 CPU,sauvola,35.2154
+page-151-001,1,Gray8 CPU,smooth_with_copies,32.5512
+page-151-001,2,Gray8 CPU,normalize,2.37926
+page-151-001,2,Gray8 CPU,resize,36.9058
+page-151-001,2,Gray8 CPU,tone,6.91817
+page-151-001,2,Gray8 CPU,gaussian,40.4376
+page-151-001,2,Gray8 CPU,usm,43.8374
+page-151-001,2,Gray8 CPU,sauvola,40.18
+page-151-001,2,Gray8 CPU,smooth_with_copies,32.2776
+page-151-001,2,v0.4.2,resize,105.016
+page-151-001,2,v0.4.2,tone,30.7918
+page-151-001,2,v0.4.2,gaussian,220.906
+page-151-001,2,v0.4.2,usm,192.895
+page-151-001,2,v0.4.2,sauvola,85.9284
+page-151-001,2,v0.4.2,smooth_with_copies,87.9958
+page-151-001,3,v0.4.2,resize,80.2016
+page-151-001,3,v0.4.2,tone,25.5054
+page-151-001,3,v0.4.2,gaussian,213.067
+page-151-001,3,v0.4.2,usm,188.364
+page-151-001,3,v0.4.2,sauvola,100.2
+page-151-001,3,v0.4.2,smooth_with_copies,98.7219
+page-151-001,3,Gray8 CPU,normalize,1.55069
+page-151-001,3,Gray8 CPU,resize,29.5106
+page-151-001,3,Gray8 CPU,tone,4.58317
+page-151-001,3,Gray8 CPU,gaussian,30.7483
+page-151-001,3,Gray8 CPU,usm,34.0189
+page-151-001,3,Gray8 CPU,sauvola,35.8212
+page-151-001,3,Gray8 CPU,smooth_with_copies,38.0067
+page-151-001,4,Gray8 CPU,normalize,2.01151
+page-151-001,4,Gray8 CPU,resize,28.179
+page-151-001,4,Gray8 CPU,tone,4.31729
+page-151-001,4,Gray8 CPU,gaussian,34.2391
+page-151-001,4,Gray8 CPU,usm,37.2245
+page-151-001,4,Gray8 CPU,sauvola,38.1901
+page-151-001,4,Gray8 CPU,smooth_with_copies,30.0945
+page-151-001,4,v0.4.2,resize,102.75
+page-151-001,4,v0.4.2,tone,26.2698
+page-151-001,4,v0.4.2,gaussian,216.418
+page-151-001,4,v0.4.2,usm,182.931
+page-151-001,4,v0.4.2,sauvola,105.289
+page-151-001,4,v0.4.2,smooth_with_copies,86.7177
+page-152-002,0,Gray8 CPU,normalize,2.10291
+page-152-002,0,Gray8 CPU,resize,33.0514
+page-152-002,0,Gray8 CPU,tone,5.40613
+page-152-002,0,Gray8 CPU,gaussian,39.9361
+page-152-002,0,Gray8 CPU,usm,45.6129
+page-152-002,0,Gray8 CPU,sauvola,39.2888
+page-152-002,0,Gray8 CPU,smooth_with_copies,30.0756
+page-152-002,0,v0.4.2,resize,122.868
+page-152-002,0,v0.4.2,tone,25.9295
+page-152-002,0,v0.4.2,gaussian,220.167
+page-152-002,0,v0.4.2,usm,209.132
+page-152-002,0,v0.4.2,sauvola,111.391
+page-152-002,0,v0.4.2,smooth_with_copies,90.5191
+page-152-002,1,v0.4.2,resize,112.609
+page-152-002,1,v0.4.2,tone,25.2663
+page-152-002,1,v0.4.2,gaussian,220.259
+page-152-002,1,v0.4.2,usm,201.663
+page-152-002,1,v0.4.2,sauvola,123.629
+page-152-002,1,v0.4.2,smooth_with_copies,95.5239
+page-152-002,1,Gray8 CPU,normalize,1.91973
+page-152-002,1,Gray8 CPU,resize,36.0877
+page-152-002,1,Gray8 CPU,tone,6.16993
+page-152-002,1,Gray8 CPU,gaussian,44.2229
+page-152-002,1,Gray8 CPU,usm,42.7675
+page-152-002,1,Gray8 CPU,sauvola,45.7874
+page-152-002,1,Gray8 CPU,smooth_with_copies,29.3563
+page-152-002,2,Gray8 CPU,normalize,2.37704
+page-152-002,2,Gray8 CPU,resize,37.0182
+page-152-002,2,Gray8 CPU,tone,5.46801
+page-152-002,2,Gray8 CPU,gaussian,45.7022
+page-152-002,2,Gray8 CPU,usm,44.5518
+page-152-002,2,Gray8 CPU,sauvola,53.5724
+page-152-002,2,Gray8 CPU,smooth_with_copies,35.5316
+page-152-002,2,v0.4.2,resize,105.533
+page-152-002,2,v0.4.2,tone,25.6948
+page-152-002,2,v0.4.2,gaussian,233.641
+page-152-002,2,v0.4.2,usm,206.026
+page-152-002,2,v0.4.2,sauvola,95.472
+page-152-002,2,v0.4.2,smooth_with_copies,90.8238
+page-152-002,3,v0.4.2,resize,104.832
+page-152-002,3,v0.4.2,tone,26.4964
+page-152-002,3,v0.4.2,gaussian,195.218
+page-152-002,3,v0.4.2,usm,176.086
+page-152-002,3,v0.4.2,sauvola,117.558
+page-152-002,3,v0.4.2,smooth_with_copies,92.4611
+page-152-002,3,Gray8 CPU,normalize,1.57544
+page-152-002,3,Gray8 CPU,resize,27.2138
+page-152-002,3,Gray8 CPU,tone,4.72593
+page-152-002,3,Gray8 CPU,gaussian,34.4327
+page-152-002,3,Gray8 CPU,usm,39.3997
+page-152-002,3,Gray8 CPU,sauvola,50.5528
+page-152-002,3,Gray8 CPU,smooth_with_copies,32.465
+page-152-002,4,Gray8 CPU,normalize,2.39096
+page-152-002,4,Gray8 CPU,resize,36.3759
+page-152-002,4,Gray8 CPU,tone,4.88724
+page-152-002,4,Gray8 CPU,gaussian,37.7863
+page-152-002,4,Gray8 CPU,usm,39.4145
+page-152-002,4,Gray8 CPU,sauvola,36.169
+page-152-002,4,Gray8 CPU,smooth_with_copies,31.9277
+page-152-002,4,v0.4.2,resize,107.23
+page-152-002,4,v0.4.2,tone,25.1644
+page-152-002,4,v0.4.2,gaussian,224.329
+page-152-002,4,v0.4.2,usm,209.902
+page-152-002,4,v0.4.2,sauvola,106.4
+page-152-002,4,v0.4.2,smooth_with_copies,96.0583
+page-153-003,0,Gray8 CPU,normalize,2.6073
+page-153-003,0,Gray8 CPU,resize,37.0711
+page-153-003,0,Gray8 CPU,tone,5.63084
+page-153-003,0,Gray8 CPU,gaussian,40.4547
+page-153-003,0,Gray8 CPU,usm,43.6741
+page-153-003,0,Gray8 CPU,sauvola,44.6199
+page-153-003,0,Gray8 CPU,smooth_with_copies,32.2041
+page-153-003,0,v0.4.2,resize,104.991
+page-153-003,0,v0.4.2,tone,31.0642
+page-153-003,0,v0.4.2,gaussian,226.208
+page-153-003,0,v0.4.2,usm,203.543
+page-153-003,0,v0.4.2,sauvola,99.7201
+page-153-003,0,v0.4.2,smooth_with_copies,89.3736
+page-153-003,1,v0.4.2,resize,105.121
+page-153-003,1,v0.4.2,tone,25.446
+page-153-003,1,v0.4.2,gaussian,219.125
+page-153-003,1,v0.4.2,usm,200.81
+page-153-003,1,v0.4.2,sauvola,116.191
+page-153-003,1,v0.4.2,smooth_with_copies,99.616
+page-153-003,1,Gray8 CPU,normalize,1.62136
+page-153-003,1,Gray8 CPU,resize,27.4587
+page-153-003,1,Gray8 CPU,tone,4.69532
+page-153-003,1,Gray8 CPU,gaussian,33.5819
+page-153-003,1,Gray8 CPU,usm,34.5765
+page-153-003,1,Gray8 CPU,sauvola,41.2649
+page-153-003,1,Gray8 CPU,smooth_with_copies,31.6862
+page-153-003,2,Gray8 CPU,normalize,1.91369
+page-153-003,2,Gray8 CPU,resize,34.543
+page-153-003,2,Gray8 CPU,tone,5.44459
+page-153-003,2,Gray8 CPU,gaussian,41.0628
+page-153-003,2,Gray8 CPU,usm,43.418
+page-153-003,2,Gray8 CPU,sauvola,35.7557
+page-153-003,2,Gray8 CPU,smooth_with_copies,31.4024
+page-153-003,2,v0.4.2,resize,125.059
+page-153-003,2,v0.4.2,tone,26.2459
+page-153-003,2,v0.4.2,gaussian,214.957
+page-153-003,2,v0.4.2,usm,197.934
+page-153-003,2,v0.4.2,sauvola,110.859
+page-153-003,2,v0.4.2,smooth_with_copies,91.7055
+page-153-003,3,v0.4.2,resize,112.213
+page-153-003,3,v0.4.2,tone,25.1063
+page-153-003,3,v0.4.2,gaussian,201.853
+page-153-003,3,v0.4.2,usm,198.324
+page-153-003,3,v0.4.2,sauvola,118.237
+page-153-003,3,v0.4.2,smooth_with_copies,99.0848
+page-153-003,3,Gray8 CPU,normalize,1.6612
+page-153-003,3,Gray8 CPU,resize,27.7185
+page-153-003,3,Gray8 CPU,tone,4.11753
+page-153-003,3,Gray8 CPU,gaussian,36.3239
+page-153-003,3,Gray8 CPU,usm,39.0606
+page-153-003,3,Gray8 CPU,sauvola,45.3074
+page-153-003,3,Gray8 CPU,smooth_with_copies,31.6153
+page-153-003,4,Gray8 CPU,normalize,2.35366
+page-153-003,4,Gray8 CPU,resize,33.8546
+page-153-003,4,Gray8 CPU,tone,5.15782
+page-153-003,4,Gray8 CPU,gaussian,39.7975
+page-153-003,4,Gray8 CPU,usm,45.3895
+page-153-003,4,Gray8 CPU,sauvola,40.6929
+page-153-003,4,Gray8 CPU,smooth_with_copies,32.509
+page-153-003,4,v0.4.2,resize,93.9708
+page-153-003,4,v0.4.2,tone,25.1077
+page-153-003,4,v0.4.2,gaussian,225.46
+page-153-003,4,v0.4.2,usm,195.515
+page-153-003,4,v0.4.2,sauvola,106.707
+page-153-003,4,v0.4.2,smooth_with_copies,84.1346
+page-154-004,0,Gray8 CPU,normalize,1.91647
+page-154-004,0,Gray8 CPU,resize,32.0122
+page-154-004,0,Gray8 CPU,tone,4.21053
+page-154-004,0,Gray8 CPU,gaussian,39.5416
+page-154-004,0,Gray8 CPU,usm,39.714
+page-154-004,0,Gray8 CPU,sauvola,45.6294
+page-154-004,0,Gray8 CPU,smooth_with_copies,31.5563
+page-154-004,0,v0.4.2,resize,107.072
+page-154-004,0,v0.4.2,tone,33.5419
+page-154-004,0,v0.4.2,gaussian,213.577
+page-154-004,0,v0.4.2,usm,180.239
+page-154-004,0,v0.4.2,sauvola,108.353
+page-154-004,0,v0.4.2,smooth_with_copies,93.2762
+page-154-004,1,v0.4.2,resize,101.445
+page-154-004,1,v0.4.2,tone,19.9045
+page-154-004,1,v0.4.2,gaussian,262.449
+page-154-004,1,v0.4.2,usm,205.372
+page-154-004,1,v0.4.2,sauvola,97.9463
+page-154-004,1,v0.4.2,smooth_with_copies,98.1188
+page-154-004,1,Gray8 CPU,normalize,1.21748
+page-154-004,1,Gray8 CPU,resize,22.6042
+page-154-004,1,Gray8 CPU,tone,3.80611
+page-154-004,1,Gray8 CPU,gaussian,38.015
+page-154-004,1,Gray8 CPU,usm,39.0636
+page-154-004,1,Gray8 CPU,sauvola,43.3986
+page-154-004,1,Gray8 CPU,smooth_with_copies,41.764
+page-154-004,2,Gray8 CPU,normalize,2.34998
+page-154-004,2,Gray8 CPU,resize,36.5696
+page-154-004,2,Gray8 CPU,tone,4.40215
+page-154-004,2,Gray8 CPU,gaussian,38.7071
+page-154-004,2,Gray8 CPU,usm,39.8474
+page-154-004,2,Gray8 CPU,sauvola,44.7729
+page-154-004,2,Gray8 CPU,smooth_with_copies,32.7895
+page-154-004,2,v0.4.2,resize,105.297
+page-154-004,2,v0.4.2,tone,25.159
+page-154-004,2,v0.4.2,gaussian,216.016
+page-154-004,2,v0.4.2,usm,208.303
+page-154-004,2,v0.4.2,sauvola,106.187
+page-154-004,2,v0.4.2,smooth_with_copies,84.855
+page-154-004,3,v0.4.2,resize,110.428
+page-154-004,3,v0.4.2,tone,31.251
+page-154-004,3,v0.4.2,gaussian,217.346
+page-154-004,3,v0.4.2,usm,206.545
+page-154-004,3,v0.4.2,sauvola,122.144
+page-154-004,3,v0.4.2,smooth_with_copies,103.796
+page-154-004,3,Gray8 CPU,normalize,2.37294
+page-154-004,3,Gray8 CPU,resize,36.8498
+page-154-004,3,Gray8 CPU,tone,8.54524
+page-154-004,3,Gray8 CPU,gaussian,67.3371
+page-154-004,3,Gray8 CPU,usm,46.9872
+page-154-004,3,Gray8 CPU,sauvola,46.3135
+page-154-004,3,Gray8 CPU,smooth_with_copies,34.7386
+page-154-004,4,Gray8 CPU,normalize,2.64839
+page-154-004,4,Gray8 CPU,resize,59.2828
+page-154-004,4,Gray8 CPU,tone,4.64464
+page-154-004,4,Gray8 CPU,gaussian,37.0614
+page-154-004,4,Gray8 CPU,usm,35.0482
+page-154-004,4,Gray8 CPU,sauvola,40.7736
+page-154-004,4,Gray8 CPU,smooth_with_copies,36.1601
+page-154-004,4,v0.4.2,resize,110.834
+page-154-004,4,v0.4.2,tone,25.7286
+page-154-004,4,v0.4.2,gaussian,202.176
+page-154-004,4,v0.4.2,usm,206.448
+page-154-004,4,v0.4.2,sauvola,110.208
+page-154-004,4,v0.4.2,smooth_with_copies,86.3268
+page-155-005,0,Gray8 CPU,normalize,2.00852
+page-155-005,0,Gray8 CPU,resize,30.062
+page-155-005,0,Gray8 CPU,tone,4.21187
+page-155-005,0,Gray8 CPU,gaussian,39.3112
+page-155-005,0,Gray8 CPU,usm,42.7932
+page-155-005,0,Gray8 CPU,sauvola,40.593
+page-155-005,0,Gray8 CPU,smooth_with_copies,32.6023
+page-155-005,0,v0.4.2,resize,104.452
+page-155-005,0,v0.4.2,tone,25.3417
+page-155-005,0,v0.4.2,gaussian,232.471
+page-155-005,0,v0.4.2,usm,215.839
+page-155-005,0,v0.4.2,sauvola,113.472
+page-155-005,0,v0.4.2,smooth_with_copies,85.6522
+page-155-005,1,v0.4.2,resize,115.283
+page-155-005,1,v0.4.2,tone,25.0907
+page-155-005,1,v0.4.2,gaussian,222.147
+page-155-005,1,v0.4.2,usm,205.399
+page-155-005,1,v0.4.2,sauvola,115.929
+page-155-005,1,v0.4.2,smooth_with_copies,90.4646
+page-155-005,1,Gray8 CPU,normalize,2.01494
+page-155-005,1,Gray8 CPU,resize,45.4308
+page-155-005,1,Gray8 CPU,tone,5.40609
+page-155-005,1,Gray8 CPU,gaussian,33.4133
+page-155-005,1,Gray8 CPU,usm,38.9432
+page-155-005,1,Gray8 CPU,sauvola,45.132
+page-155-005,1,Gray8 CPU,smooth_with_copies,31.0257
+page-155-005,2,Gray8 CPU,normalize,2.01881
+page-155-005,2,Gray8 CPU,resize,35.0082
+page-155-005,2,Gray8 CPU,tone,4.72923
+page-155-005,2,Gray8 CPU,gaussian,38.4272
+page-155-005,2,Gray8 CPU,usm,43.2426
+page-155-005,2,Gray8 CPU,sauvola,45.2333
+page-155-005,2,Gray8 CPU,smooth_with_copies,32.0093
+page-155-005,2,v0.4.2,resize,114.938
+page-155-005,2,v0.4.2,tone,25.0847
+page-155-005,2,v0.4.2,gaussian,200.723
+page-155-005,2,v0.4.2,usm,201.764
+page-155-005,2,v0.4.2,sauvola,107.995
+page-155-005,2,v0.4.2,smooth_with_copies,92.7672
+page-155-005,3,v0.4.2,resize,104.442
+page-155-005,3,v0.4.2,tone,36.2311
+page-155-005,3,v0.4.2,gaussian,218.188
+page-155-005,3,v0.4.2,usm,199.63
+page-155-005,3,v0.4.2,sauvola,108.813
+page-155-005,3,v0.4.2,smooth_with_copies,97.4832
+page-155-005,3,Gray8 CPU,normalize,1.775
+page-155-005,3,Gray8 CPU,resize,27.4022
+page-155-005,3,Gray8 CPU,tone,5.10738
+page-155-005,3,Gray8 CPU,gaussian,37.4895
+page-155-005,3,Gray8 CPU,usm,40.0214
+page-155-005,3,Gray8 CPU,sauvola,44.5387
+page-155-005,3,Gray8 CPU,smooth_with_copies,30.57
+page-155-005,4,Gray8 CPU,normalize,2.13951
+page-155-005,4,Gray8 CPU,resize,30.9954
+page-155-005,4,Gray8 CPU,tone,4.41999
+page-155-005,4,Gray8 CPU,gaussian,33.7882
+page-155-005,4,Gray8 CPU,usm,34.6276
+page-155-005,4,Gray8 CPU,sauvola,48.8969
+page-155-005,4,Gray8 CPU,smooth_with_copies,32.1227
+page-155-005,4,v0.4.2,resize,105.793
+page-155-005,4,v0.4.2,tone,25.2957
+page-155-005,4,v0.4.2,gaussian,227.884
+page-155-005,4,v0.4.2,usm,204.283
+page-155-005,4,v0.4.2,sauvola,108.213
+page-155-005,4,v0.4.2,smooth_with_copies,89.1993
+page-156-006,0,Gray8 CPU,normalize,1.92138
+page-156-006,0,Gray8 CPU,resize,37.1556
+page-156-006,0,Gray8 CPU,tone,5.55725
+page-156-006,0,Gray8 CPU,gaussian,47.8412
+page-156-006,0,Gray8 CPU,usm,51.5537
+page-156-006,0,Gray8 CPU,sauvola,47.5523
+page-156-006,0,Gray8 CPU,smooth_with_copies,35.3382
+page-156-006,0,v0.4.2,resize,133.792
+page-156-006,0,v0.4.2,tone,44.6982
+page-156-006,0,v0.4.2,gaussian,285.075
+page-156-006,0,v0.4.2,usm,238.955
+page-156-006,0,v0.4.2,sauvola,156.793
+page-156-006,0,v0.4.2,smooth_with_copies,85.6062
+page-156-006,1,v0.4.2,resize,131.598
+page-156-006,1,v0.4.2,tone,94.5285
+page-156-006,1,v0.4.2,gaussian,247.784
+page-156-006,1,v0.4.2,usm,222.697
+page-156-006,1,v0.4.2,sauvola,119.808
+page-156-006,1,v0.4.2,smooth_with_copies,99.3557
+page-156-006,1,Gray8 CPU,normalize,2.08378
+page-156-006,1,Gray8 CPU,resize,35.932
+page-156-006,1,Gray8 CPU,tone,5.41798
+page-156-006,1,Gray8 CPU,gaussian,37.7223
+page-156-006,1,Gray8 CPU,usm,38.9671
+page-156-006,1,Gray8 CPU,sauvola,36.4664
+page-156-006,1,Gray8 CPU,smooth_with_copies,32.2845
+page-156-006,2,Gray8 CPU,normalize,2.37004
+page-156-006,2,Gray8 CPU,resize,35.503
+page-156-006,2,Gray8 CPU,tone,5.49847
+page-156-006,2,Gray8 CPU,gaussian,37.7123
+page-156-006,2,Gray8 CPU,usm,42.0779
+page-156-006,2,Gray8 CPU,sauvola,45.2749
+page-156-006,2,Gray8 CPU,smooth_with_copies,32.1248
+page-156-006,2,v0.4.2,resize,110.082
+page-156-006,2,v0.4.2,tone,25.1083
+page-156-006,2,v0.4.2,gaussian,201.564
+page-156-006,2,v0.4.2,usm,199.165
+page-156-006,2,v0.4.2,sauvola,97.1627
+page-156-006,2,v0.4.2,smooth_with_copies,91.3928
+page-156-006,3,v0.4.2,resize,104.52
+page-156-006,3,v0.4.2,tone,25.1423
+page-156-006,3,v0.4.2,gaussian,228.589
+page-156-006,3,v0.4.2,usm,203.666
+page-156-006,3,v0.4.2,sauvola,113.735
+page-156-006,3,v0.4.2,smooth_with_copies,90.5736
+page-156-006,3,Gray8 CPU,normalize,1.45784
+page-156-006,3,Gray8 CPU,resize,23.6014
+page-156-006,3,Gray8 CPU,tone,4.02649
+page-156-006,3,Gray8 CPU,gaussian,29.0228
+page-156-006,3,Gray8 CPU,usm,27.2146
+page-156-006,3,Gray8 CPU,sauvola,31.3007
+page-156-006,3,Gray8 CPU,smooth_with_copies,29.6909
+page-156-006,4,Gray8 CPU,normalize,1.91406
+page-156-006,4,Gray8 CPU,resize,28.1605
+page-156-006,4,Gray8 CPU,tone,5.51658
+page-156-006,4,Gray8 CPU,gaussian,37.8031
+page-156-006,4,Gray8 CPU,usm,46.1166
+page-156-006,4,Gray8 CPU,sauvola,40.8514
+page-156-006,4,Gray8 CPU,smooth_with_copies,31.0919
+page-156-006,4,v0.4.2,resize,80.3984
+page-156-006,4,v0.4.2,tone,17.4565
+page-156-006,4,v0.4.2,gaussian,206.255
+page-156-006,4,v0.4.2,usm,160.968
+page-156-006,4,v0.4.2,sauvola,83.1219
+page-156-006,4,v0.4.2,smooth_with_copies,90.6518
+page-157-007,0,Gray8 CPU,normalize,1.82964
+page-157-007,0,Gray8 CPU,resize,28.3798
+page-157-007,0,Gray8 CPU,tone,5.46733
+page-157-007,0,Gray8 CPU,gaussian,37.1961
+page-157-007,0,Gray8 CPU,usm,35.1251
+page-157-007,0,Gray8 CPU,sauvola,41.8788
+page-157-007,0,Gray8 CPU,smooth_with_copies,32.5998
+page-157-007,0,v0.4.2,resize,119.129
+page-157-007,0,v0.4.2,tone,25.3185
+page-157-007,0,v0.4.2,gaussian,217.423
+page-157-007,0,v0.4.2,usm,201.469
+page-157-007,0,v0.4.2,sauvola,110.492
+page-157-007,0,v0.4.2,smooth_with_copies,85.2988
+page-157-007,1,v0.4.2,resize,119.952
+page-157-007,1,v0.4.2,tone,26.0069
+page-157-007,1,v0.4.2,gaussian,211.334
+page-157-007,1,v0.4.2,usm,206.535
+page-157-007,1,v0.4.2,sauvola,117.166
+page-157-007,1,v0.4.2,smooth_with_copies,91.5966
+page-157-007,1,Gray8 CPU,normalize,1.64726
+page-157-007,1,Gray8 CPU,resize,27.9032
+page-157-007,1,Gray8 CPU,tone,4.27998
+page-157-007,1,Gray8 CPU,gaussian,37.0865
+page-157-007,1,Gray8 CPU,usm,42.6995
+page-157-007,1,Gray8 CPU,sauvola,46.8832
+page-157-007,1,Gray8 CPU,smooth_with_copies,31.3078
+page-157-007,2,Gray8 CPU,normalize,2.41398
+page-157-007,2,Gray8 CPU,resize,36.712
+page-157-007,2,Gray8 CPU,tone,5.00744
+page-157-007,2,Gray8 CPU,gaussian,39.9052
+page-157-007,2,Gray8 CPU,usm,43.9212
+page-157-007,2,Gray8 CPU,sauvola,45.7485
+page-157-007,2,Gray8 CPU,smooth_with_copies,31.3166
+page-157-007,2,v0.4.2,resize,119.793
+page-157-007,2,v0.4.2,tone,25.2723
+page-157-007,2,v0.4.2,gaussian,226.504
+page-157-007,2,v0.4.2,usm,202.167
+page-157-007,2,v0.4.2,sauvola,113.213
+page-157-007,2,v0.4.2,smooth_with_copies,85.2129
+page-157-007,3,v0.4.2,resize,119.302
+page-157-007,3,v0.4.2,tone,26.0661
+page-157-007,3,v0.4.2,gaussian,227.172
+page-157-007,3,v0.4.2,usm,205.372
+page-157-007,3,v0.4.2,sauvola,105.724
+page-157-007,3,v0.4.2,smooth_with_copies,95.2281
+page-157-007,3,Gray8 CPU,normalize,1.76209
+page-157-007,3,Gray8 CPU,resize,30.2501
+page-157-007,3,Gray8 CPU,tone,5.56568
+page-157-007,3,Gray8 CPU,gaussian,38.0983
+page-157-007,3,Gray8 CPU,usm,34.5546
+page-157-007,3,Gray8 CPU,sauvola,45.2675
+page-157-007,3,Gray8 CPU,smooth_with_copies,32.1904
+page-157-007,4,Gray8 CPU,normalize,2.18772
+page-157-007,4,Gray8 CPU,resize,37.3636
+page-157-007,4,Gray8 CPU,tone,5.26247
+page-157-007,4,Gray8 CPU,gaussian,38.1034
+page-157-007,4,Gray8 CPU,usm,38.4145
+page-157-007,4,Gray8 CPU,sauvola,43.7104
+page-157-007,4,Gray8 CPU,smooth_with_copies,29.9375
+page-157-007,4,v0.4.2,resize,104.955
+page-157-007,4,v0.4.2,tone,32.4139
+page-157-007,4,v0.4.2,gaussian,223.401
+page-157-007,4,v0.4.2,usm,206.046
+page-157-007,4,v0.4.2,sauvola,108.589
+page-157-007,4,v0.4.2,smooth_with_copies,86.1097
+page-158-008,0,Gray8 CPU,normalize,2.35834
+page-158-008,0,Gray8 CPU,resize,32.2647
+page-158-008,0,Gray8 CPU,tone,4.2946
+page-158-008,0,Gray8 CPU,gaussian,36.2843
+page-158-008,0,Gray8 CPU,usm,40.9063
+page-158-008,0,Gray8 CPU,sauvola,46.0654
+page-158-008,0,Gray8 CPU,smooth_with_copies,32.2508
+page-158-008,0,v0.4.2,resize,106.659
+page-158-008,0,v0.4.2,tone,36.9695
+page-158-008,0,v0.4.2,gaussian,228.564
+page-158-008,0,v0.4.2,usm,213.472
+page-158-008,0,v0.4.2,sauvola,107.393
+page-158-008,0,v0.4.2,smooth_with_copies,85.4437
+page-158-008,1,v0.4.2,resize,103.743
+page-158-008,1,v0.4.2,tone,16.5582
+page-158-008,1,v0.4.2,gaussian,225.794
+page-158-008,1,v0.4.2,usm,196.095
+page-158-008,1,v0.4.2,sauvola,118
+page-158-008,1,v0.4.2,smooth_with_copies,96.0233
+page-158-008,1,Gray8 CPU,normalize,1.65226
+page-158-008,1,Gray8 CPU,resize,29.7079
+page-158-008,1,Gray8 CPU,tone,4.38438
+page-158-008,1,Gray8 CPU,gaussian,36.6265
+page-158-008,1,Gray8 CPU,usm,40.1002
+page-158-008,1,Gray8 CPU,sauvola,34.9491
+page-158-008,1,Gray8 CPU,smooth_with_copies,32.8072
+page-158-008,2,Gray8 CPU,normalize,2.38769
+page-158-008,2,Gray8 CPU,resize,36.8021
+page-158-008,2,Gray8 CPU,tone,4.26912
+page-158-008,2,Gray8 CPU,gaussian,33.2673
+page-158-008,2,Gray8 CPU,usm,42.6881
+page-158-008,2,Gray8 CPU,sauvola,52.829
+page-158-008,2,Gray8 CPU,smooth_with_copies,30.5056
+page-158-008,2,v0.4.2,resize,97.7003
+page-158-008,2,v0.4.2,tone,17.2257
+page-158-008,2,v0.4.2,gaussian,164.345
+page-158-008,2,v0.4.2,usm,210.199
+page-158-008,2,v0.4.2,sauvola,94.3534
+page-158-008,2,v0.4.2,smooth_with_copies,88.321
+page-158-008,3,v0.4.2,resize,105.087
+page-158-008,3,v0.4.2,tone,25.4909
+page-158-008,3,v0.4.2,gaussian,215.582
+page-158-008,3,v0.4.2,usm,202.258
+page-158-008,3,v0.4.2,sauvola,87.7065
+page-158-008,3,v0.4.2,smooth_with_copies,90.4314
+page-158-008,3,Gray8 CPU,normalize,1.8288
+page-158-008,3,Gray8 CPU,resize,22.5565
+page-158-008,3,Gray8 CPU,tone,3.7689
+page-158-008,3,Gray8 CPU,gaussian,31.9833
+page-158-008,3,Gray8 CPU,usm,33.8962
+page-158-008,3,Gray8 CPU,sauvola,40.6436
+page-158-008,3,Gray8 CPU,smooth_with_copies,29.9842
+page-158-008,4,Gray8 CPU,normalize,2.1057
+page-158-008,4,Gray8 CPU,resize,29.7958
+page-158-008,4,Gray8 CPU,tone,4.95805
+page-158-008,4,Gray8 CPU,gaussian,33.6922
+page-158-008,4,Gray8 CPU,usm,33.5568
+page-158-008,4,Gray8 CPU,sauvola,31.6793
+page-158-008,4,Gray8 CPU,smooth_with_copies,29.517
+page-158-008,4,v0.4.2,resize,88.6574
+page-158-008,4,v0.4.2,tone,25.8495
+page-158-008,4,v0.4.2,gaussian,182.581
+page-158-008,4,v0.4.2,usm,194.628
+page-158-008,4,v0.4.2,sauvola,108.166
+page-158-008,4,v0.4.2,smooth_with_copies,87.9235
+page-159-009,0,Gray8 CPU,normalize,1.98691
+page-159-009,0,Gray8 CPU,resize,32.8337
+page-159-009,0,Gray8 CPU,tone,5.4445
+page-159-009,0,Gray8 CPU,gaussian,36.9043
+page-159-009,0,Gray8 CPU,usm,32.9494
+page-159-009,0,Gray8 CPU,sauvola,34.5766
+page-159-009,0,Gray8 CPU,smooth_with_copies,32.3539
+page-159-009,0,v0.4.2,resize,103.1
+page-159-009,0,v0.4.2,tone,18.884
+page-159-009,0,v0.4.2,gaussian,193.664
+page-159-009,0,v0.4.2,usm,203.572
+page-159-009,0,v0.4.2,sauvola,107.49
+page-159-009,0,v0.4.2,smooth_with_copies,87.4679
+page-159-009,1,v0.4.2,resize,105.41
+page-159-009,1,v0.4.2,tone,16.3758
+page-159-009,1,v0.4.2,gaussian,222.092
+page-159-009,1,v0.4.2,usm,201.187
+page-159-009,1,v0.4.2,sauvola,115.771
+page-159-009,1,v0.4.2,smooth_with_copies,89.1587
+page-159-009,1,Gray8 CPU,normalize,1.55386
+page-159-009,1,Gray8 CPU,resize,27.5415
+page-159-009,1,Gray8 CPU,tone,4.25082
+page-159-009,1,Gray8 CPU,gaussian,33.4708
+page-159-009,1,Gray8 CPU,usm,32.6951
+page-159-009,1,Gray8 CPU,sauvola,38.818
+page-159-009,1,Gray8 CPU,smooth_with_copies,33.2404
+page-159-009,2,Gray8 CPU,normalize,2.43609
+page-159-009,2,Gray8 CPU,resize,33.377
+page-159-009,2,Gray8 CPU,tone,5.04422
+page-159-009,2,Gray8 CPU,gaussian,38.5313
+page-159-009,2,Gray8 CPU,usm,40.0724
+page-159-009,2,Gray8 CPU,sauvola,42.7176
+page-159-009,2,Gray8 CPU,smooth_with_copies,32.1781
+page-159-009,2,v0.4.2,resize,85.9465
+page-159-009,2,v0.4.2,tone,16.7785
+page-159-009,2,v0.4.2,gaussian,219.569
+page-159-009,2,v0.4.2,usm,211.384
+page-159-009,2,v0.4.2,sauvola,103.084
+page-159-009,2,v0.4.2,smooth_with_copies,94.233
+page-159-009,3,v0.4.2,resize,111.909
+page-159-009,3,v0.4.2,tone,25.0794
+page-159-009,3,v0.4.2,gaussian,216.286
+page-159-009,3,v0.4.2,usm,208.07
+page-159-009,3,v0.4.2,sauvola,121.311
+page-159-009,3,v0.4.2,smooth_with_copies,100.677
+page-159-009,3,Gray8 CPU,normalize,2.04039
+page-159-009,3,Gray8 CPU,resize,32.5276
+page-159-009,3,Gray8 CPU,tone,5.38314
+page-159-009,3,Gray8 CPU,gaussian,39.3095
+page-159-009,3,Gray8 CPU,usm,39.3435
+page-159-009,3,Gray8 CPU,sauvola,34.9574
+page-159-009,3,Gray8 CPU,smooth_with_copies,29.5003
+page-159-009,4,Gray8 CPU,normalize,1.91305
+page-159-009,4,Gray8 CPU,resize,29.9975
+page-159-009,4,Gray8 CPU,tone,4.89943
+page-159-009,4,Gray8 CPU,gaussian,41.2483
+page-159-009,4,Gray8 CPU,usm,39.7345
+page-159-009,4,Gray8 CPU,sauvola,45.689
+page-159-009,4,Gray8 CPU,smooth_with_copies,36.9961
+page-159-009,4,v0.4.2,resize,118.838
+page-159-009,4,v0.4.2,tone,25.6096
+page-159-009,4,v0.4.2,gaussian,217.494
+page-159-009,4,v0.4.2,usm,215.036
+page-159-009,4,v0.4.2,sauvola,106.828
+page-159-009,4,v0.4.2,smooth_with_copies,88.9692
+page-160-010,0,Gray8 CPU,normalize,2.65149
+page-160-010,0,Gray8 CPU,resize,48.4985
+page-160-010,0,Gray8 CPU,tone,7.2028
+page-160-010,0,Gray8 CPU,gaussian,53.4492
+page-160-010,0,Gray8 CPU,usm,44.9098
+page-160-010,0,Gray8 CPU,sauvola,51.7837
+page-160-010,0,Gray8 CPU,smooth_with_copies,34.395
+page-160-010,0,v0.4.2,resize,116.069
+page-160-010,0,v0.4.2,tone,44.6961
+page-160-010,0,v0.4.2,gaussian,223.746
+page-160-010,0,v0.4.2,usm,209.652
+page-160-010,0,v0.4.2,sauvola,110.098
+page-160-010,0,v0.4.2,smooth_with_copies,86.2824
+page-160-010,1,v0.4.2,resize,104.119
+page-160-010,1,v0.4.2,tone,25.1091
+page-160-010,1,v0.4.2,gaussian,229.78
+page-160-010,1,v0.4.2,usm,186.698
+page-160-010,1,v0.4.2,sauvola,116.155
+page-160-010,1,v0.4.2,smooth_with_copies,89.6507
+page-160-010,1,Gray8 CPU,normalize,1.5602
+page-160-010,1,Gray8 CPU,resize,27.379
+page-160-010,1,Gray8 CPU,tone,3.72936
+page-160-010,1,Gray8 CPU,gaussian,29.3217
+page-160-010,1,Gray8 CPU,usm,28.9852
+page-160-010,1,Gray8 CPU,sauvola,31.4904
+page-160-010,1,Gray8 CPU,smooth_with_copies,31.1483
+page-160-010,2,Gray8 CPU,normalize,2.66453
+page-160-010,2,Gray8 CPU,resize,36.936
+page-160-010,2,Gray8 CPU,tone,5.34864
+page-160-010,2,Gray8 CPU,gaussian,39.3394
+page-160-010,2,Gray8 CPU,usm,38.6723
+page-160-010,2,Gray8 CPU,sauvola,35.2333
+page-160-010,2,Gray8 CPU,smooth_with_copies,32.214
+page-160-010,2,v0.4.2,resize,102.082
+page-160-010,2,v0.4.2,tone,26.3537
+page-160-010,2,v0.4.2,gaussian,179.704
+page-160-010,2,v0.4.2,usm,205.174
+page-160-010,2,v0.4.2,sauvola,106.752
+page-160-010,2,v0.4.2,smooth_with_copies,84.9474
+page-160-010,3,v0.4.2,resize,106.426
+page-160-010,3,v0.4.2,tone,25.2207
+page-160-010,3,v0.4.2,gaussian,208.039
+page-160-010,3,v0.4.2,usm,178.486
+page-160-010,3,v0.4.2,sauvola,117.976
+page-160-010,3,v0.4.2,smooth_with_copies,96.8552
+page-160-010,3,Gray8 CPU,normalize,1.65474
+page-160-010,3,Gray8 CPU,resize,27.4845
+page-160-010,3,Gray8 CPU,tone,4.20468
+page-160-010,3,Gray8 CPU,gaussian,33.0349
+page-160-010,3,Gray8 CPU,usm,33.3089
+page-160-010,3,Gray8 CPU,sauvola,31.4168
+page-160-010,3,Gray8 CPU,smooth_with_copies,39.4681
+page-160-010,4,Gray8 CPU,normalize,1.91083
+page-160-010,4,Gray8 CPU,resize,29.7098
+page-160-010,4,Gray8 CPU,tone,4.60594
+page-160-010,4,Gray8 CPU,gaussian,37.7826
+page-160-010,4,Gray8 CPU,usm,33.1481
+page-160-010,4,Gray8 CPU,sauvola,34.8122
+page-160-010,4,Gray8 CPU,smooth_with_copies,37.0439
+page-160-010,4,v0.4.2,resize,107.518
+page-160-010,4,v0.4.2,tone,25.1066
+page-160-010,4,v0.4.2,gaussian,220.603
+page-160-010,4,v0.4.2,usm,221.157
+page-160-010,4,v0.4.2,sauvola,106.987
+page-160-010,4,v0.4.2,smooth_with_copies,87.7291
