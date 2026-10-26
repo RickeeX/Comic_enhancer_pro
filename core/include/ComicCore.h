@@ -66,6 +66,9 @@ int ce_smooth_binary(uint8_t *pixels, uint32_t width, uint32_t height,
    Empty foreground returns the whole input. rect: x,y,width,height. */
 int ce_content_bounds(const uint8_t *pixels, uint32_t width, uint32_t height,
                       int32_t threshold, int32_t ignore_diameter, uint32_t rect[4]);
+int ce_blit(const uint8_t *src, uint32_t width, uint32_t height, uint8_t *dst,
+            uint32_t canvas_width, uint32_t canvas_height, uint32_t x, uint32_t y, size_t capacity);
+int ce_whiten_outside(uint8_t *pixels, uint32_t width, uint32_t height, const float rect[4]);
 int ce_mirror(const uint8_t *src, uint32_t width, uint32_t height, int32_t horizontal,
               int32_t vertical, uint8_t *dst, size_t capacity);
 int ce_invert(uint8_t *pixels, uint32_t width, uint32_t height);

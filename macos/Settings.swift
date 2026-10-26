@@ -36,6 +36,7 @@ struct Settings: Codable, Equatable {
 
     var preservePhysical = false
     var sourceDPI: Double = 0
+    var sourceDPIY: Double = 0
     var targetDPI: Double = 600
     var pageMode = 0
     var pageUnit = 0
@@ -69,7 +70,7 @@ struct Settings: Codable, Equatable {
 
     init() {}
     private enum CodingKeys: String, CodingKey {
-        case brightness, contrast, gamma, whitePoint, sharpen, blur, scale, crop, grayscale, levels, autoLevels, rotation, page, format, quality, binarization, threshold, adaptiveRadius, sauvolaK, cleanup, cleanupPasses, dither, blurMethod, filterRadius, edgeSigma, sharpenMethod, sharpenThreshold, deskew, deskewLimit, angle, preservePhysical, sourceDPI, targetDPI, pageMode, pageUnit, pageWidth, pageHeight, marginLeft, marginRight, marginTop, marginBottom, fitMode, alignX, alignY, alternateMargins, cropLeft, cropRight, cropTop, cropBottom, autoTrim, trimThreshold, trimIgnore, trimPadding, removeBorders, despeckleDiameter, despeckleThreshold, edgeSmooth, smoothPasses, fillNotches, resampleMethod, flipHorizontal, flipVertical
+        case sourceDPIY, brightness, contrast, gamma, whitePoint, sharpen, blur, scale, crop, grayscale, levels, autoLevels, rotation, page, format, quality, binarization, threshold, adaptiveRadius, sauvolaK, cleanup, cleanupPasses, dither, blurMethod, filterRadius, edgeSigma, sharpenMethod, sharpenThreshold, deskew, deskewLimit, angle, preservePhysical, sourceDPI, targetDPI, pageMode, pageUnit, pageWidth, pageHeight, marginLeft, marginRight, marginTop, marginBottom, fitMode, alignX, alignY, alternateMargins, cropLeft, cropRight, cropTop, cropBottom, autoTrim, trimThreshold, trimIgnore, trimPadding, removeBorders, despeckleDiameter, despeckleThreshold, edgeSmooth, smoothPasses, fillNotches, resampleMethod, flipHorizontal, flipVertical
     }
     init(from decoder: Decoder) throws {
         self.init()
@@ -105,6 +106,7 @@ struct Settings: Codable, Equatable {
         deskewLimit = try c.decodeIfPresent(Double.self, forKey: .deskewLimit) ?? deskewLimit
         angle = try c.decodeIfPresent(Double.self, forKey: .angle) ?? angle
         preservePhysical = try c.decodeIfPresent(Bool.self, forKey: .preservePhysical) ?? preservePhysical
+        sourceDPIY = try c.decodeIfPresent(Double.self, forKey: .sourceDPIY) ?? sourceDPIY
         sourceDPI = try c.decodeIfPresent(Double.self, forKey: .sourceDPI) ?? sourceDPI
         targetDPI = try c.decodeIfPresent(Double.self, forKey: .targetDPI) ?? targetDPI
         pageMode = try c.decodeIfPresent(Int.self, forKey: .pageMode) ?? pageMode
@@ -153,8 +155,8 @@ struct Settings: Codable, Equatable {
               (1...100).contains(edgeSigma), (0...1).contains(sharpenMethod),
               (0...255).contains(sharpenThreshold), (0...2).contains(deskew),
               (1...10).contains(deskewLimit), (-15...15).contains(angle) else { throw ProcessingError.message("参数文件包含超出范围的值。") }
-        let geometry = [sourceDPI, targetDPI, pageWidth, pageHeight, marginLeft, marginRight, marginTop, marginBottom, cropLeft, cropRight, cropTop, cropBottom]
-        guard geometry.allSatisfy({ $0.isFinite }), (sourceDPI == 0 || (36...2400).contains(sourceDPI)),
+        let geometry = [sourceDPI, sourceDPIY, targetDPI, pageWidth, pageHeight, marginLeft, marginRight, marginTop, marginBottom, cropLeft, cropRight, cropTop, cropBottom]
+        guard geometry.allSatisfy({ $0.isFinite }), (sourceDPI == 0 || (36...2400).contains(sourceDPI)), (sourceDPIY == 0 || (36...2400).contains(sourceDPIY)),
               (36...2400).contains(targetDPI), (0.01...100000).contains(pageWidth), (0.01...100000).contains(pageHeight),
               [marginLeft, marginRight, marginTop, marginBottom].allSatisfy({ (0...10000).contains($0) }),
               [cropLeft, cropRight, cropTop, cropBottom].allSatisfy({ (0...0.49).contains($0) }),

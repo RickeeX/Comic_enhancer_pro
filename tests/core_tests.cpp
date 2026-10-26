@@ -92,6 +92,11 @@ void pageTests(){
    check(ce_canvas(source.data(),4,2,4,2,rect,method,result.data(),result.size())==0,"canvas succeeds");
    check(result==source,"every resampler has exact identity at integer samples");
  }
+ std::vector<uint8_t> canvas(6*4*4,255);auto black=rgba(std::vector<uint8_t>(4*2,0));
+ check(ce_blit(black.data(),4,2,canvas.data(),6,4,1,1,canvas.size())==0,"native blit");
+ check(canvas[0]==255&&canvas[(1*6+1)*4]==0,"native blit preserves other canvas pixels");
+ float inner[4]={2,1,2,2};check(ce_whiten_outside(canvas.data(),6,4,inner)==0&&canvas[(1*6+1)*4]==255&&canvas[(1*6+2)*4]==0,"page margins mask overflow");
+ check(ce_blit(black.data(),4,2,canvas.data(),6,4,4,1,canvas.size())==-2,"out of bounds blit rejected");
  std::vector<uint8_t> result(6*4*4);float padded[4]={1,1,4,2};
  check(ce_canvas(source.data(),4,2,6,4,padded,2,result.data(),result.size())==0,"padded canvas");
  check(result[0]==255&&result[(1*6+1)*4]==0&&result[(2*6+4)*4]==255,"white margin and content placement");

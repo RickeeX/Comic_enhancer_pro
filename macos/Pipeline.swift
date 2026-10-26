@@ -76,7 +76,7 @@ enum Pipeline {
         let original = try Processor.sourceImage(item, preview: preview)
         var f = PipelineResult(original: original, image: original, logicalWidth: source.width, logicalHeight: source.height,
             dpiX: source.dpiX ?? 300, dpiY: source.dpiY ?? 300,
-            grayLevels: original.colorSpace?.model == .monochrome ? 0 : -1, source: source)
+            grayLevels: original.colorSpace?.model == .monochrome ? (original.bitsPerComponent == 1 ? 2 : 0) : -1, source: source)
         for stage in recipe.stages where stage.enabled {
             try autoreleasepool { try apply(stage, to: &f, preview: preview, pageIndex: pageIndex) }
         }
@@ -149,7 +149,8 @@ enum Pipeline {
         f.image = image
     }
     private static func geometry(_ s: Settings, frame f: inout PipelineResult, preview: Bool, pageIndex: Int) throws {
-        if s.sourceDPI > 0 { f.dpiX = s.sourceDPI; f.dpiY = s.sourceDPI }
+        if s.sourceDPI > 0 { f.dpiX = s.sourceDPI; if s.sourceDPIY == 0 { f.dpiY = s.sourceDPI } }
+        if s.sourceDPIY > 0 { f.dpiY = s.sourceDPIY }
         if s.page != 0 {
             let half = f.image.width / 2
             try crop(CGRect(x: s.page == 1 ? 0 : half, y: 0, width: s.page == 1 ? half : f.image.width-half, height: f.image.height), frame: &f)
@@ -216,10 +217,44 @@ enum Pipeline {
                 ce_canvas(p.baseAddress, UInt32(f.image.width), UInt32(f.image.height), UInt32(actualW), UInt32(actualH), r.baseAddress, Int32(s.resampleMethod), o.baseAddress, o.count)
             } } }
             guard status == 0 else { throw ProcessingError.message("页面排版失败（\(status)）。") }
+            if s.pageMode != 0 {
+                var clip = [Float(ml*xr), Float(mt*yr), Float((width-ml-mr)*xr), Float((height-mt-mb)*yr)]
+                let masked = output.withUnsafeMutableBufferPointer { p in clip.withUnsafeMutableBufferPointer { r in ce_whiten_outside(p.baseAddress, UInt32(actualW), UInt32(actualH), r.baseAddress) } }
+                guard masked == 0 else { throw ProcessingError.message("版心裁切失败。") }
+            }
             f.image = try image(output, width: actualW, height: actualH)
             if f.grayLevels >= 0 && s.resampleMethod != 0 { f.grayLevels = 0 }
         }
         f.logicalWidth = logicalW; f.logicalHeight = logicalH
+    }
+    static func stitch(_ first: PipelineResult, _ second: PipelineResult, vertical: Bool, gap: Int) throws -> PipelineResult {
+        guard first.logicalWidth == first.image.width, first.logicalHeight == first.image.height,
+              second.logicalWidth == second.image.width, second.logicalHeight == second.image.height else { throw ProcessingError.message("拼接需使用全尺寸处理结果。") }
+        guard (0...1000).contains(gap) else { throw ProcessingError.message("拼接间距需为 0–1000 像素。") }
+        let w1 = first.image.width, h1 = first.image.height
+        let w2 = max(1,Int((Double(second.logicalWidth)/second.dpiX*first.dpiX).rounded()))
+        let h2 = max(1,Int((Double(second.logicalHeight)/second.dpiY*first.dpiY).rounded()))
+        try checkSize(w2,h2)
+        let width = vertical ? max(w1,w2) : w1+w2+gap, height = vertical ? h1+h2+gap : max(h1,h2)
+        try checkSize(width,height)
+        let a = try rgba(first.image)
+        var b = try rgba(second.image)
+        let resized = w2 != second.image.width || h2 != second.image.height
+        if resized {
+            var scaled = [UInt8](repeating:255,count:w2*h2*4), rect = [Float(0),0,Float(w2),Float(h2)]
+            let status = b.withUnsafeBufferPointer { p in scaled.withUnsafeMutableBufferPointer { out in rect.withUnsafeMutableBufferPointer { r in ce_canvas(p.baseAddress,UInt32(second.image.width),UInt32(second.image.height),UInt32(w2),UInt32(h2),r.baseAddress,2,out.baseAddress,out.count) } } }
+            guard status == 0 else { throw ProcessingError.message("拼接分辨率匹配失败。") }; b = scaled
+        }
+        var output = [UInt8](repeating:255,count:width*height*4)
+        let positions = vertical ? [(w1,h1,(width-w1)/2,0),(w2,h2,(width-w2)/2,h1+gap)] : [(w1,h1,0,(height-h1)/2),(w2,h2,w1+gap,(height-h2)/2)]
+        for (i, item) in positions.enumerated() {
+            let input = i == 0 ? a : b
+            let status = input.withUnsafeBufferPointer { p in output.withUnsafeMutableBufferPointer { out in ce_blit(p.baseAddress,UInt32(item.0),UInt32(item.1),out.baseAddress,UInt32(width),UInt32(height),UInt32(item.2),UInt32(item.3),out.count) } }
+            guard status == 0 else { throw ProcessingError.message("拼接失败。") }
+        }
+        let image = try self.image(output,width:width,height:height)
+        return PipelineResult(original:first.original,image:image,logicalWidth:width,logicalHeight:height,dpiX:first.dpiX,dpiY:first.dpiY,
+            grayLevels:first.grayLevels == 2 && second.grayLevels == 2 && !resized ? 2 : first.grayLevels >= 0 && second.grayLevels >= 0 ? 0 : -1,source:first.source)
     }
     static func write(_ result: PipelineResult, to url: URL, recipe: Recipe) throws {
         var settings = Settings(); settings.format = recipe.format; settings.quality = recipe.quality

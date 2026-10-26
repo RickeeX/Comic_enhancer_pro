@@ -125,3 +125,22 @@ extern "C" int ce_mirror(const uint8_t*src,uint32_t w,uint32_t h,int32_t horizon
         for(uint32_t x=0;x<w;++x)std::copy_n(src+(size_t(yy)*w+w-1-x)*4,4,dst+(size_t(y)*w+x)*4);
     }});return 0;}catch(...){return -4;}
 }
+
+extern "C" int ce_whiten_outside(uint8_t*rgba,uint32_t w,uint32_t h,const float rect[4]){
+    if(!rgba||!rect)return -1;
+    if(!pageSize(w,h))return -2;
+    for(int i=0;i<4;++i)if(!std::isfinite(rect[i])||std::abs(rect[i])>1.e9f)return -1;
+    if(rect[2]<0||rect[3]<0)return -1;
+    try{rows(h,0,[&](uint32_t a,uint32_t b){for(uint32_t y=a;y<b;++y)for(uint32_t x=0;x<w;++x)
+        if(x+.5f<rect[0]||x+.5f>=rect[0]+rect[2]||y+.5f<rect[1]||y+.5f>=rect[1]+rect[3]){
+            auto p=rgba+(size_t(y)*w+x)*4;p[0]=p[1]=p[2]=255;
+        }
+    });return 0;}catch(...){return -4;}
+}
+
+extern "C" int ce_blit(const uint8_t*src,uint32_t w,uint32_t h,uint8_t*dst,uint32_t dw,uint32_t dh,uint32_t x,uint32_t y,size_t capacity){
+    if(!src||!dst||src==dst)return -1;
+    if(!pageSize(w,h)||!pageSize(dw,dh)||uint64_t(x)+w>dw||uint64_t(y)+h>dh)return -2;
+    if(capacity<size_t(dw)*dh*4)return -3;
+    try{rows(h,0,[&](uint32_t a,uint32_t b){for(uint32_t row=a;row<b;++row)std::copy_n(src+size_t(row)*w*4,size_t(w)*4,dst+(size_t(row+y)*dw+x)*4);});return 0;}catch(...){return -4;}
+}

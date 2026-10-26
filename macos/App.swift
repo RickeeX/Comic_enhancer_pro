@@ -154,6 +154,9 @@ struct RecipeInspector: View {
                         VStack(spacing: 12) {
                             Picker("格式", selection: $model.recipe.format) { Text("PNG · 无损").tag("png"); Text("JPEG").tag("jpg"); Text("TIFF").tag("tiff") }
                             if model.recipe.format == "jpg" { Adjustment(title: "JPEG 品质", value: $model.recipe.quality, range: 0.1...1, displayScale: 100) }
+                            Picker("命名",selection:$model.recipe.nameStyle) { Text("索引 + 原名").tag(0);Text("仅索引").tag(1) }
+                            TextField("文件名前缀",text:$model.recipe.namePrefix).textFieldStyle(.roundedBorder)
+                            Stepper("索引位数：\(model.recipe.nameDigits)",value:$model.recipe.nameDigits,in:4...8)
                             Text("DPI 随文件写出；JPEG 会引入灰边，二值页面请使用 PNG / TIFF。").font(.caption2).foregroundStyle(.secondary)
                         }.padding(.top, 10)
                     }
@@ -324,7 +327,8 @@ struct PageEditor: View {
             }
             Divider()
             Toggle("保持当前物理尺寸，改变 DPI", isOn: $model.settings.preservePhysical)
-            NumericField(title: "源 DPI（0=自动）", value: $model.settings.sourceDPI)
+            NumericField(title: "源 X DPI（0=自动）", value: $model.settings.sourceDPI)
+            NumericField(title: "源 Y DPI（0=跟随X / 自动）", value: $model.settings.sourceDPIY)
             if model.settings.preservePhysical {
                 NumericField(title: "目标 DPI（回车生效）", value: $model.settings.targetDPI)
                 Text("先重采样增加像素，再执行后续锐化 / 模糊 / 二值化。不会凭空恢复扫描中没有的细节。").font(.caption2).foregroundStyle(.secondary)

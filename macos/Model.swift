@@ -5,6 +5,47 @@ import UniformTypeIdentifiers
 private final class Cancellation: @unchecked Sendable {
     private let lock = NSLock()
     private var stopped = false
+    func exportSpread(vertical: Bool) {
+        guard !busy, displayedIndices.count == 2 else { return }
+        var indices = displayedIndices
+        if rightToLeft && !vertical { indices.reverse() }
+        let pages = indices.map { files[$0] }, plans = indices.map { book.values[files[$0]] ?? .neutral }
+        let alert = NSAlert(); alert.messageText = vertical ? "垂直拼接两页" : "水平拼接两页"
+        alert.informativeText = "分别执行两页各自的操作栈，再按第一页 DPI 匹配第二页并拼接。间距（0–1000 像素）："
+        let field = NSTextField(string:"0"); field.frame = NSRect(x:0,y:0,width:260,height:26);alert.accessoryView = field
+        alert.addButton(withTitle:"继续");alert.addButton(withTitle:"取消")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        guard let gap = Int(field.stringValue), (0...1000).contains(gap) else { error = "间距需为 0–1000 像素。"; return }
+        let panel = NSSavePanel(); let config = recipe
+        panel.allowedContentTypes = [config.format == "jpg" ? .jpeg : config.format == "tiff" ? .tiff : .png]
+        panel.nameFieldStringValue = String(format:"拼接_%04d_%04d.",indices[0],indices[1])+config.format
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard !files.contains(where: { $0.url.resolvingSymlinksInPath() == url.resolvingSymlinksInPath() }) else { error = "不能覆盖源文件。"; return }
+        busy = true; completed = 0; total = 2; status = "正在逐页处理并拼接…"
+        let cancel = Cancellation(); cancellation = cancel
+        queue.async {
+            let result = Result { try autoreleasepool { () throws -> Void in
+                let a = try Pipeline.render(pages[0],recipe:plans[0],preview:false,pageIndex:indices[0])
+                guard !cancel.isCancelled else { throw ProcessingError.message("拼接已停止。") }
+                DispatchQueue.main.async { self.completed = 1 }
+                let b = try Pipeline.render(pages[1],recipe:plans[1],preview:false,pageIndex:indices[1])
+                guard !cancel.isCancelled else { throw ProcessingError.message("拼接已停止。") }
+                let merged = try Pipeline.stitch(a,b,vertical:vertical,gap:gap)
+                try Pipeline.write(merged,to:url,recipe:config)
+                let project = Project(pages:pages,recipes:zip(pages,plans).map { Project.PageRecipe(page:$0.0,recipe:$0.1) })
+                let object = try JSONSerialization.jsonObject(with:JSONEncoder().encode(project))
+                let record: [String:Any] = ["operation":"stitch","vertical":vertical,"gapPixels":gap,"project":object,"output":merged.description]
+                try JSONSerialization.data(withJSONObject:record,options:[.prettyPrinted,.sortedKeys]).write(to:url.appendingPathExtension("json"),options:.atomic)
+            } }
+            DispatchQueue.main.async {
+                self.busy = false
+                switch result {
+                case .success: self.completed = 2;self.status = "拼接已导出，参数记录保存在同名 JSON 中。";NSWorkspace.shared.activateFileViewerSelecting([url])
+                case .failure(let e):self.error = e.localizedDescription;self.status = "拼接未完成。"
+                }
+            }
+        }
+    }
     func cancel() { lock.lock(); stopped = true; lock.unlock() }
     var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return stopped }
 }
@@ -20,7 +61,7 @@ final class Model: ObservableObject {
             if let page = selection {
                 remember(oldValue, page: page); book.values[page] = recipe
             }
-            preview()
+            if recipe.stages != oldValue.stages { preview() }
         }
     }
     @Published var selectedStage: UUID?
@@ -75,7 +116,7 @@ final class Model: ObservableObject {
     }
     private func renderedPreview(_ page: PageItem, recipe: Recipe, preview: Bool, index: Int) throws -> PipelineResult {
         let date = (try? page.url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-        if let entry = previewCache[page], entry.recipe == recipe, entry.preview == preview, entry.index == index, entry.date == date { return entry.value }
+        if let entry = previewCache[page], entry.recipe.stages == recipe.stages, entry.preview == preview, entry.index == index, entry.date == date { return entry.value }
         let value = try Pipeline.render(page, recipe: recipe, preview: preview, pageIndex: index)
         previewCache[page] = PreviewEntry(recipe: recipe, preview: preview, index: index, date: date, value: value)
         return value
@@ -128,7 +169,7 @@ final class Model: ObservableObject {
     func toggleStage(_ id: UUID) { guard let i = recipe.stages.firstIndex(where: { $0.id == id }) else { return }; recipe.stages[i].enabled.toggle() }
     func resetPage() { guard let page = selection else { return }; remember(recipe, page: page); loadRecipe(.standard(), page: page) }
     func copyRecipe() {
-        do { let data = try JSONEncoder().encode(recipe); NSPasteboard.general.clearContents(); NSPasteboard.general.setString(String(decoding: data, as: UTF8.self), forType: .string); status = "已复制当前页的完整操作栈。" }
+        do { _ = try recipe.validated(); let data = try JSONEncoder().encode(recipe); NSPasteboard.general.clearContents(); NSPasteboard.general.setString(String(decoding: data, as: UTF8.self), forType: .string); status = "已复制当前页的完整操作栈。" }
         catch { self.error = error.localizedDescription }
     }
     func pasteRecipe() {
@@ -140,6 +181,7 @@ final class Model: ObservableObject {
     func applyRecipe(_ scope: String) {
         guard let current = activeIndex else { return }
         do {
+            _ = try recipe.validated()
             let indices: Set<Int>
             if scope == "all" { indices = Set(files.indices) }
             else if scope == "after" { indices = Set(files.indices.filter { $0 > current }) }
@@ -265,7 +307,7 @@ final class Model: ObservableObject {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let project = Project(pages: files, recipes: files.compactMap { page in book.values[page].map { Project.PageRecipe(page: page, recipe: $0) } })
-            try JSONEncoder().encode(project).write(to: url, options: .atomic); status = "工程已保存（含逐页操作栈，原文件需保留）。"
+            try JSONEncoder().encode(project.validated()).write(to: url, options: .atomic); status = "工程已保存（含逐页操作栈，原文件需保留）。"
         } catch { self.error = error.localizedDescription }
     }
     func loadProject() {
@@ -285,6 +327,8 @@ final class Model: ObservableObject {
         guard !busy && !files.isEmpty else { return }
         let inputs = single ? selection.map { [$0] } ?? [] : files
         guard !inputs.isEmpty else { return }
+        do { for page in inputs { _ = try (book.values[page] ?? .neutral).validated() } }
+        catch { self.error = error.localizedDescription; return }
         let panel = NSOpenPanel(); panel.canChooseFiles = false; panel.canChooseDirectories = true; panel.canCreateDirectories = true
         panel.message = "新建独立导出目录；每页使用各自的操作栈，并写入 DPI。"
         guard panel.runModal() == .OK, let parent = panel.url else { return }
@@ -300,9 +344,11 @@ final class Model: ObservableObject {
                 autoreleasepool {
                     do {
                         let config = plans[index]
+                        let name = config.filename(index:indices[index],page:page)
+                        let destination = folder.appendingPathComponent(name)
+                        guard !FileManager.default.fileExists(atPath:destination.path) else { throw ProcessingError.message("输出名称冲突："+name) }
                         let value = try Pipeline.render(page, recipe: config, preview: false, pageIndex: indices[index])
-                        let name = String(format: "%04d_", indices[index]) + page.exportStem + "." + config.format
-                        try Pipeline.write(value, to: folder.appendingPathComponent(name), recipe: config)
+                        try Pipeline.write(value, to: destination, recipe: config)
                         succeeded += 1; log += "OK\t\(page.path)\t\(name)\t\(value.description)\n"
                     } catch { failed += 1; log += "ERROR\t\(page.path)\t\(error.localizedDescription)\n" }
                 }

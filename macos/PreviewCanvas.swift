@@ -215,6 +215,9 @@ struct PreviewPanel: View {
                     Toggle("全尺寸细节预览", isOn: $model.fullPreview)
                     Toggle("显示原图", isOn: $model.showOriginal)
                     Toggle("纠斜辅助网格（不写出）", isOn: $model.showGrid)
+                    Divider()
+                    Button("水平拼接当前两页…") { model.exportSpread(vertical:false) }.disabled(model.displayedIndices.count != 2 || model.busy)
+                    Button("垂直拼接当前两页…") { model.exportSpread(vertical:true) }.disabled(model.displayedIndices.count != 2 || model.busy)
                 } label: { Label("预览", systemImage: "rectangle.split.2x1") }
             }.controlSize(.small).padding(12)
             ZStack {

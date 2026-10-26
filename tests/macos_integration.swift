@@ -4,7 +4,7 @@ import ImageIO
 
 @main
 struct IntegrationTests {
-    static func pdfFixture(_ url: URL, jpeg: Data? = nil) throws {
+    static func pdfFixture(_ url: URL, jpeg: Data? = nil, decode: String? = nil) throws {
         let content = "q 80 0 0 40 24 60 cm /Im1 Do Q\n1 0 0 rg 10 180 30 20 re f\n"
         let pixels: [UInt8] = [0,0,0, 255,255,255, 255,0,0, 0,255,0, 0,0,255, 120,120,120, 200,200,200, 255,255,255]
         var objects: [Data] = [
@@ -15,7 +15,7 @@ struct IntegrationTests {
             Data("<< /Length \(content.utf8.count) >>\nstream\n\(content)endstream".utf8)
         ]
         let payload = jpeg ?? Data(pixels)
-        let dimensions = jpeg == nil ? "/Width 4 /Height 2" : "/Width 120 /Height 80 /Filter /DCTDecode"
+        let dimensions = (jpeg == nil ? "/Width 4 /Height 2" : "/Width 120 /Height 80 /Filter /DCTDecode") + (decode.map { " /Decode [\($0)]" } ?? "")
         var image = Data("<< /Type /XObject /Subtype /Image \(dimensions) /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length \(payload.count) >>\nstream\n".utf8)
         image.append(payload); image.append(Data("\nendstream".utf8)); objects.append(image)
         var pdf = Data("%PDF-1.4\n".utf8), offsets = [0]
@@ -128,6 +128,12 @@ struct IntegrationTests {
         let originalJPEG = try Processor.render(jpegURL, settings: Settings(), preview: false)
         precondition(extractedJPEG.enhanced.width == 120 && extractedJPEG.enhanced.height == 80)
         precondition((extractedJPEG.enhanced.dataProvider!.data! as Data) == (originalJPEG.enhanced.dataProvider!.data! as Data), "DCT image stream extraction differs from JPEG decode")
+        let invertedPDF = folder.appendingPathComponent("inverted-scan.pdf")
+        try pdfFixture(invertedPDF,decode:"1 0 1 0 1 0")
+        let invertedItems = try PDFLoader.items(invertedPDF,embedded:true,dpi:200)
+        let invertedScan = try Processor.render(invertedItems[0],settings:Settings(),preview:false).enhanced
+        let invertedData = invertedScan.dataProvider!.data! as Data
+        precondition(invertedData[0] == 255 && invertedData[4] == 0,"PDF Decode inversion was not applied")
         let cached = try Processor.render(pages[0], settings: Settings(), preview: true)
         precondition(cached.original.width == 288)
         var changed = Settings(); changed.brightness = 0.25
@@ -174,14 +180,29 @@ struct IntegrationTests {
         var pdfDPI = Stage(.page); pdfDPI.settings.preservePhysical = true; pdfDPI.settings.targetDPI = 72
         let physicalPDF = try Pipeline.render(extracted[0], recipe: Recipe(stages: [pdfDPI]), preview: false)
         precondition(physicalPDF.logicalWidth == 80 && physicalPDF.logicalHeight == 40)
+        let anisotropicInfo = try Pipeline.sourceInfo(jpegItems[0])
+        precondition(abs((anisotropicInfo.dpiX ?? 0)-108) < 0.01 && abs((anisotropicInfo.dpiY ?? 0)-144) < 0.01)
+        let normalizedPixelAspect = try Pipeline.render(jpegItems[0],recipe:Recipe(stages:[pdfDPI]),preview:false)
+        precondition(normalizedPixelAspect.logicalWidth == 80 && normalizedPixelAspect.logicalHeight == 40,"Unequal PDF X/Y PPI ignored")
+        let horizontal = try Pipeline.stitch(highDPI,highDPI,vertical:false,gap:5)
+        let vertical = try Pipeline.stitch(highDPI,highDPI,vertical:true,gap:7)
+        precondition(horizontal.image.width == 645 && horizontal.image.height == 213 && horizontal.grayLevels == 2)
+        precondition(vertical.image.width == 320 && vertical.image.height == 433)
+        let horizontalData = horizontal.image.dataProvider!.data! as Data
+        precondition(horizontalData[(100*645+322)*4] == 255,"Stitch gap is not white")
         var normalize = Stage(.page); normalize.settings.sourceDPI = 300; normalize.settings.pageUnit = 1
         normalize.settings.pageMode = 3; normalize.settings.pageWidth = 200; normalize.settings.pageHeight = 300
         normalize.settings.marginLeft = 10; normalize.settings.marginRight = 20; normalize.settings.marginTop = 30; normalize.settings.marginBottom = 40
+        var layouts: [Data] = []
         for fit in [0,1,2] {
             normalize.settings.fitMode = fit
             let result = try Pipeline.render(PageItem(url: source), recipe: Recipe(stages: [normalize]), preview: false)
             precondition(result.image.width == 200 && result.image.height == 300)
+            let bytes = result.image.dataProvider!.data! as Data
+            layouts.append(bytes)
+            precondition(bytes[(150*200+5)*4] == 255 && bytes[(15*200+100)*4] == 255, "Fill/crop destroyed page margins")
         }
+        precondition(layouts[0] != layouts[1] && layouts[1] != layouts[2], "Layout fit/fill/stretch modes ignored")
         let pageA = PageItem(url: source), pageB = PageItem(url: jpegURL), pageC = PageItem(url: bad)
         var book = RecipeBook(); var a = book.recipe(for: pageA); a.stages[1].settings.brightness = 0.2; book.values[pageA] = a
         precondition(book.recipe(for: pageB).stages[1].settings.brightness == 0, "Default pages share settings")
@@ -193,6 +214,10 @@ struct IntegrationTests {
         precondition(savedProject.recipes.count == 3)
         do { _ = try PageRanges.indices("0000-9999", count: 3); fatalError("Invalid range accepted") } catch is ProcessingError { }
         precondition(Recipe.standard().stages.last?.kind == .binary)
+        var names = Recipe.standard();names.nameStyle = 1;names.namePrefix = "book_";names.nameDigits = 5
+        precondition(names.filename(index:12,page:pageA) == "book_00012.png")
+        names.namePrefix = "../"
+        do { _ = try names.validated();fatalError("Unsafe filename prefix accepted") } catch is ProcessingError { }
         var unsafeLegacy = Settings(); unsafeLegacy.cleanup = 3; unsafeLegacy.binarization = 2
         let migratedRecipe = try Recipe.legacy(unsafeLegacy)
         precondition(migratedRecipe.stages.allSatisfy { $0.settings.cleanup == 0 && !$0.settings.edgeSmooth }, "Unsafe legacy morphology re-enabled")

@@ -111,7 +111,7 @@ enum PDFLoader {
         var mask: CGPDFStreamRef?
         var colorMask: CGPDFArrayRef?
         var decode: CGPDFArrayRef?
-        if CGPDFDictionaryGetArray(dict, "Decode", &decode) { throw ProcessingError.message("此图片有自定义色彩映射，请选择按页渲染以保留外观。") }
+        _ = CGPDFDictionaryGetArray(dict, "Decode", &decode)
         if CGPDFDictionaryGetArray(dict, "Mask", &colorMask) || CGPDFDictionaryGetStream(dict, "SMask", &mask) || CGPDFDictionaryGetStream(dict, "Mask", &mask) {
             throw ProcessingError.message("此内嵌图片有透明掩膜，请选择 PDF 按页渲染以保留外观。")
         }
@@ -125,7 +125,12 @@ enum PDFLoader {
         var format = CGPDFDataFormat.raw
         guard let data = CGPDFStreamCopyData(stream, &format) else { throw ProcessingError.message("无法解压 PDF 图片。") }
         var image: CGImage?
-        if format != .raw, let source = CGImageSourceCreateWithData(data, nil) {
+        if format != .raw {
+            guard let source = CGImageSourceCreateWithData(data, nil) else { throw ProcessingError.message("内嵌编码图片已损坏，请改用按页渲染。") }
+            if let properties = CGImageSourceCopyPropertiesAtIndex(source,0,nil) as? [CFString:Any],
+               let w = properties[kCGImagePropertyPixelWidth] as? NSNumber, let h = properties[kCGImagePropertyPixelHeight] as? NSNumber {
+                guard w.intValue > 0, h.intValue > 0, w.intValue <= 100_000_000 / h.intValue else { throw ProcessingError.message("内嵌编码图片超过像素上限。") }
+            }
             image = CGImageSourceCreateThumbnailAtIndex(source, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true,
                 kCGImageSourceThumbnailMaxPixelSize: preview ? min(1600, max(w, h)) : max(w, h)] as CFDictionary)
         } else {
@@ -141,11 +146,21 @@ enum PDFLoader {
             guard [1,2,4,8].contains(bits), space.numberOfComponents == 1 || bits == 8 else { throw ProcessingError.message("暂不支持此图片位深，请选择按页渲染。") }
             let stride = (w * bits * space.numberOfComponents + 7) / 8
             guard CFDataGetLength(data) >= stride * h, let provider = CGDataProvider(data: data) else { throw ProcessingError.message("PDF 图片数据不完整。") }
-            var decodeArray: CGPDFArrayRef?
-            if CGPDFDictionaryGetArray(dict, "Decode", &decodeArray) { throw ProcessingError.message("此图片有自定义色彩映射，请选择按页渲染以保留外观。") }
             image = CGImage(width: w, height: h, bitsPerComponent: bits, bitsPerPixel: bits * space.numberOfComponents,
                 bytesPerRow: stride, space: space, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
                 provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
+        }
+        if let decode = decode, let base = image, let space = base.colorSpace, let provider = base.dataProvider {
+            let count = CGPDFArrayGetCount(decode)
+            guard count == space.numberOfComponents * 2, !(format != .raw && space.model == .cmyk) else { throw ProcessingError.message("此色彩映射需使用按页渲染。") }
+            var values = [CGFloat](repeating:0,count:count)
+            for i in 0..<count {
+                var value: CGPDFReal = 0
+                guard CGPDFArrayGetNumber(decode,i,&value), value.isFinite, value >= 0, value <= 1 else { throw ProcessingError.message("图片色彩映射范围无效，请按页渲染。") }
+                values[i] = CGFloat(value)
+            }
+            image = values.withUnsafeBufferPointer { p in CGImage(width:base.width,height:base.height,bitsPerComponent:base.bitsPerComponent,bitsPerPixel:base.bitsPerPixel,
+                bytesPerRow:base.bytesPerRow,space:space,bitmapInfo:base.bitmapInfo,provider:provider,decode:p.baseAddress,shouldInterpolate:base.shouldInterpolate,intent:base.renderingIntent) }
         }
         guard let result = image else { throw ProcessingError.message("无法解码 PDF 内嵌图片，请选择按页渲染。") }
         if preview && max(result.width, result.height) > 1600 {

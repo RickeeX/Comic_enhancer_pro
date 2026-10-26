@@ -43,15 +43,15 @@ struct Stage: Codable, Equatable, Identifiable {
         func yes(_ value: Bool) -> String { value ? "开" : "关" }
         switch kind {
         case .tone: return "亮度=\(n((s.brightness + 1) * 100)), 对比度=\(n(s.contrast * 100)), Gamma=\(n(s.gamma * 100)), 白点=\(n(s.whitePoint * 100)), 自动色阶=\(yes(s.autoLevels))"
-        case .sharpen: return "算法=\(s.sharpenMethod == 0 ? "USM" : "Laplacian"), 强度=\(n(s.sharpen * 100)), 半径=\(s.filterRadius)px, 阈值=\(n(s.sharpenThreshold))"
-        case .blur: return "算法=\(["高斯", "Box 均值", "中值", "双边"][s.blurMethod]), 强度=\(n(s.blur * 100)), 半径=\(s.filterRadius)px, 色差σ=\(n(s.edgeSigma))"
-        case .gray: return "灰度=\(yes(s.grayscale)), 减色=\(s.levels == 0 ? "连续" : "\(s.levels)级"), 抖动=\(["无", "Bayer", "Floyd–Steinberg"][s.dither])"
+        case .sharpen: return "算法=\(s.sharpenMethod == 0 ? "USM" : "Laplacian"), 强度=\(n(s.sharpen * 100)), 半径(USM)=\(s.filterRadius)px, 阈值=\(n(s.sharpenThreshold))"
+        case .blur: return "算法=\(["高斯", "Box 均值", "中值", "双边"][s.blurMethod]), 强度=\(n(s.blur * 100)), 半径=\(s.filterRadius)px, 色差σ(双边)=\(n(s.edgeSigma))"
+        case .gray: return "灰度=\(yes(s.grayscale || s.levels > 0)), 减色=\(s.levels == 0 ? "连续" : "\(s.levels)级"), 抖动=\(["无", "Bayer", "Floyd–Steinberg"][s.dither])"
         case .binary: return "算法=\(["关闭", "固定阈值", "Otsu", "Sauvola"][s.binarization]), 阈值=\(n(s.threshold)), 窗口半径=\(s.adaptiveRadius)px, k=\(n(s.sauvolaK)), 温和去毛刺=\(yes(s.edgeSmooth)), 次数=\(s.smoothPasses), 补凹口=\(yes(s.fillNotches))"
         case .despeckle: return "最大黑点直径=\(s.despeckleDiameter)px, 黑色灰度阈值=\(s.despeckleThreshold), 清除连边黑区=\(yes(s.removeBorders))"
         case .mirror: return "水平镜像=\(yes(s.flipHorizontal)), 上下翻转=\(yes(s.flipVertical))"
         case .invert: return "RGB=255−原值"
         case .page:
-            return "分页=\(["整页", "左页", "右页"][s.page]), 旋转=\(s.rotation * 90)°, 纠斜=\(s.deskew), 微调=\(n(s.angle))°, 裁边 L/R/T/B=\(n((s.cropLeft+s.crop)*100))/\(n((s.cropRight+s.crop)*100))/\(n((s.cropTop+s.crop)*100))/\(n((s.cropBottom+s.crop)*100))%, 自动内容框=\(yes(s.autoTrim)), 忽略斑点=\(s.trimIgnore)px, 补偿=\(s.trimPadding)px, 源DPI=\(s.sourceDPI == 0 ? "自动／缺失时300" : n(s.sourceDPI)), 保持物理尺寸=\(yes(s.preservePhysical)), 目标DPI=\(n(s.targetDPI)), 缩放=\(n(s.scale*100))%, 页面=\(["原尺寸", "指定宽", "指定高", "指定宽高", "内容加边距"][s.pageMode]), W/H=\(n(s.pageWidth))/\(n(s.pageHeight))\(s.pageUnit == 0 ? "cm" : "px"), 边距 L/R/T/B=\(n(s.marginLeft))/\(n(s.marginRight))/\(n(s.marginTop))/\(n(s.marginBottom)), 排布=\(["等比完整", "等比铺满裁切", "拉伸校正宽高"][s.fitMode]), 对齐=\(s.alignX)/\(s.alignY), 奇偶镜像边距=\(yes(s.alternateMargins)), 重采样=\(["最近邻", "双线性", "双三次"][s.resampleMethod])"
+            return "分页=\(["整页", "左页", "右页"][s.page]), 旋转=\(s.rotation * 90)°, 纠斜=\(["关闭", "横排", "竖排"][s.deskew]), 范围±\(n(s.deskewLimit))°, 微调=\(n(s.angle))°, 裁边 L/R/T/B=\(n((s.cropLeft+s.crop)*100))/\(n((s.cropRight+s.crop)*100))/\(n((s.cropTop+s.crop)*100))/\(n((s.cropBottom+s.crop)*100))%, 自动内容框=\(yes(s.autoTrim)), 内容阈值=\(s.trimThreshold), 清连边=\(yes(s.removeBorders)), 忽略斑点=\(s.trimIgnore)px, 补偿=\(s.trimPadding)px, 源DPI=\(s.sourceDPI == 0 ? "自动／缺失时300" : n(s.sourceDPI)), 源Y DPI=\(s.sourceDPIY == 0 ? "跟随X或自动" : n(s.sourceDPIY)), 保持物理尺寸=\(yes(s.preservePhysical)), 目标DPI=\(n(s.targetDPI)), 缩放=\(n(s.scale*100))%, 页面=\(["原尺寸", "指定宽", "指定高", "指定宽高", "内容加边距"][s.pageMode]), W/H=\(n(s.pageWidth))/\(n(s.pageHeight))\(s.pageUnit == 0 ? "cm" : "px"), 边距 L/R/T/B=\(n(s.marginLeft))/\(n(s.marginRight))/\(n(s.marginTop))/\(n(s.marginBottom)), 排布=\(["等比完整", "等比铺满裁切", "拉伸校正宽高"][s.fitMode]), 对齐=\(s.alignX)/\(s.alignY), 奇偶镜像边距=\(yes(s.alternateMargins)), 重采样=\(["最近邻", "双线性", "双三次"][s.resampleMethod])"
         }
     }
 }
@@ -59,11 +59,29 @@ struct Recipe: Codable, Equatable {
     var stages: [Stage]
     var format = "png"
     var quality: Double = 0.9
+    var nameStyle = 0
+    var namePrefix = ""
+    var nameDigits = 4
+    init(stages: [Stage]) { self.stages = stages }
+    private enum CodingKeys: String, CodingKey { case stages, format, quality, nameStyle, namePrefix, nameDigits }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        stages = try c.decode([Stage].self,forKey:.stages)
+        format = try c.decodeIfPresent(String.self,forKey:.format) ?? "png"
+        quality = try c.decodeIfPresent(Double.self,forKey:.quality) ?? 0.9
+        nameStyle = try c.decodeIfPresent(Int.self,forKey:.nameStyle) ?? 0
+        namePrefix = try c.decodeIfPresent(String.self,forKey:.namePrefix) ?? ""
+        nameDigits = try c.decodeIfPresent(Int.self,forKey:.nameDigits) ?? 4
+    }
+    func filename(index: Int, page: PageItem) -> String {
+        namePrefix + String(format:"%0*d",nameDigits,index) + (nameStyle == 0 ? "_"+page.exportStem : "") + "."+format
+    }
     static let neutral = Recipe.standard()
     static func standard() -> Recipe { Recipe(stages: [.page, .tone, .blur, .sharpen, .gray, .binary].map(Stage.init)) }
     func validated() throws -> Recipe {
         guard stages.count <= 64, Set(stages.map(\.id)).count == stages.count,
-              ["png", "jpg", "tiff"].contains(format), quality.isFinite, (0.1...1).contains(quality) else {
+              ["png", "jpg", "tiff"].contains(format), quality.isFinite, (0.1...1).contains(quality), (0...1).contains(nameStyle), (4...8).contains(nameDigits),
+              namePrefix.utf8.count <= 100, !namePrefix.contains("/"), !namePrefix.contains("\\"), !namePrefix.contains("\0") else {
             throw ProcessingError.message("操作栈无效（最多 64 步，步骤编号必须唯一）。")
         }
         for stage in stages { _ = try stage.settings.validated() }
