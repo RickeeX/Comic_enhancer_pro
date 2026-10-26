@@ -43,9 +43,10 @@ struct IntegrationTests {
     }
     static func sameInkGeometry(_ a: CGImage, _ b: CGImage, message: String) throws {
         let x = try inkBounds(a), y = try inkBounds(b)
-        let tolerance = 2.0 / Double(min(a.width,a.height,b.width,b.height))
-        precondition(abs(x.minX-y.minX) < tolerance && abs(x.minY-y.minY) < tolerance && abs(x.width-y.width) < tolerance && abs(x.height-y.height) < tolerance,
-            message + ": normalized content bounds \(x) versus \(y)")
+        let tolerance = 2.0 / Double(min(min(a.width,a.height),min(b.width,b.height)))
+        guard abs(x.minX-y.minX) < tolerance && abs(x.minY-y.minY) < tolerance && abs(x.width-y.width) < tolerance && abs(x.height-y.height) < tolerance else {
+            throw ProcessingError.message(message + ": normalized content bounds \(x) versus \(y)")
+        }
     }
     static func main() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

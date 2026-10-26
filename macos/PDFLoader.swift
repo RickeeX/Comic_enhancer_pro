@@ -88,6 +88,7 @@ enum PDFLoader {
         let bounds = page.getBoxRect(.cropBox)
         var width = abs(bounds.width), height = abs(bounds.height)
         if abs(page.rotationAngle) % 180 == 90 { swap(&width, &height) }
+        let pointSize = CGSize(width:width,height:height)
         width = ceil(width * CGFloat(item.dpi) / 72); height = ceil(height * CGFloat(item.dpi) / 72)
         guard width.isFinite, height.isFinite, width > 0, height > 0, width * height <= 100_000_000 else { throw ProcessingError.message("PDF 渲染超过 1 亿像素，请降低导入 DPI。") }
         if preview {
@@ -97,7 +98,10 @@ enum PDFLoader {
             bytesPerRow: Int(width) * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
             bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { throw ProcessingError.message("无法分配 PDF 渲染缓冲区。") }
         context.setFillColor(CGColor(gray: 1, alpha: 1)); context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-        context.concatenate(page.getDrawingTransform(.cropBox, rect: CGRect(x: 0, y: 0, width: width, height: height), rotate: 0, preserveAspectRatio: true))
+        // Resolve crop/orientation in PDF points, then scale the context to the
+        // actual raster size. A larger bitmap must enlarge the content as well.
+        context.scaleBy(x:width/pointSize.width,y:height/pointSize.height)
+        context.concatenate(page.getDrawingTransform(.cropBox, rect: CGRect(origin:.zero,size:pointSize), rotate: 0, preserveAspectRatio: true))
         context.drawPDFPage(page)
         guard let image = context.makeImage() else { throw ProcessingError.message("PDF 页面渲染失败。") }
         return image
