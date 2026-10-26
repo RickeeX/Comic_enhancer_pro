@@ -137,8 +137,12 @@ struct RecipeInspector: View {
             ScrollView {
                 LazyVStack(spacing: 6) {
                     ForEach(Array(model.recipe.stages.enumerated()), id: \.element.id) { index, step in StageRow(step: step, index: index) }
-                }.padding(.horizontal, 12).padding(.bottom, 8)
+                }.padding(8)
             }.frame(height: 225)
+                .background(Color(nsColor: .textBackgroundColor).opacity(0.45))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(nsColor: .separatorColor), lineWidth: 1))
+                .padding(.horizontal, 12).padding(.bottom, 8)
             Text("按列表从上到下执行。默认二值化最后；拖动可自行改变顺序，同一操作可重复。")
                 .font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 14).padding(.bottom, 10)
             Divider()

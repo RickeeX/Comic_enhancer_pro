@@ -88,7 +88,22 @@ extern "C" int ce_process(const uint8_t*src,uint32_t w,uint32_t h,const CEOption
             switch(o->rotation){case 1:x=ry;y=g.h-1-rx;break;case 2:x=g.w-1-rx;y=g.h-1-ry;break;case 3:x=g.w-1-ry;y=rx;break;}
             return float(src[(size_t(g.y+y)*w+g.x+x)*4+c]);
         };
+        // Pixel-only stages must not pay for rotation/clamping/interpolation.
+        // This is also the exact integer sampling path for crop/quarter turns.
+        const bool integerSamples=ow==g.rw&&oh==g.rh;
+        const bool gray=o->grayscale||o->levels||o->binarization;
         rows(oh,o->threads,[&](uint32_t a,uint32_t b){
+            if(integerSamples){
+                for(uint32_t y=a;y<b;++y)for(uint32_t x=0;x<ow;++x){
+                    uint32_t xx=x,yy=y;
+                    switch(o->rotation){case 1:xx=y;yy=g.h-1-x;break;case 2:xx=g.w-1-x;yy=g.h-1-y;break;case 3:xx=g.w-1-y;yy=x;break;}
+                    auto in=src+(size_t(g.y+yy)*w+g.x+xx)*4;
+                    auto p=dst+(size_t(y)*ow+x)*4;
+                    p[0]=lut[in[0]];p[1]=lut[in[1]];p[2]=lut[in[2]];
+                    if(gray){auto v=luminance(p);p[0]=p[1]=p[2]=v;}p[3]=255;
+                }
+                return;
+            }
             for(uint32_t y=a;y<b;++y)for(uint32_t x=0;x<ow;++x){
                 float sx=(x+.5f)*g.rw/ow-.5f,sy=(y+.5f)*g.rh/oh-.5f;
                 int ix=int(std::floor(sx)),iy=int(std::floor(sy));float fx=sx-ix,fy=sy-iy;
@@ -98,7 +113,7 @@ extern "C" int ce_process(const uint8_t*src,uint32_t w,uint32_t h,const CEOption
                     float bot=sample(ix,iy+1,c)*(1-fx)+sample(ix+1,iy+1,c)*fx;
                     p[c]=lut[byte(top*(1-fy)+bot*fy)];
                 }
-                if(o->grayscale||o->levels||o->binarization){uint8_t v=(54*p[0]+183*p[1]+19*p[2]+128)>>8;p[0]=p[1]=p[2]=v;}
+                if(gray){uint8_t v=luminance(p);p[0]=p[1]=p[2]=v;}
                 p[3]=255;
             }
         });

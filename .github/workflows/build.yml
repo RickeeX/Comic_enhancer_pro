@@ -30,12 +30,30 @@ jobs:
           set -o pipefail
           .build/core-tests --benchmark | tee .build/benchmark.log
           { echo '### CPU processing benchmark'; echo '```text'; cat .build/benchmark.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: 30 MP performance comparison with v0.4.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin tag v0.4.1
+          mkdir -p .build/baseline
+          git archive v0.4.1 core | tar -x -C .build/baseline
+          c++ -std=c++17 -O3 -DNDEBUG -pthread -I core/include .build/baseline/core/src/ComicCore.cpp tests/performance.cpp -o .build/perf-before
+          c++ -std=c++17 -O3 -DNDEBUG -pthread -I core/include core/src/ComicCore.cpp tests/performance.cpp -o .build/perf-after
+          .build/perf-before | tee .build/performance-before.log
+          .build/perf-after | tee .build/performance-after.log
+          { echo '### 30 MP core, v0.4.1 then current (same runner, O3)'; echo '```text'; cat .build/performance-before.log .build/performance-after.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - name: Native codec integration tests
         shell: bash
         run: |
           set -o pipefail
           mkdir -p .build
           ./scripts/test-macos.sh 2>&1 | tee .build/integration.log
+      - name: 30 MP native pipeline benchmark
+        shell: bash
+        run: |
+          set -euo pipefail
+          .build/macos-tests --benchmark | tee .build/native-performance.log
+          { echo '### Native decode, processing and export'; echo '```text'; cat .build/native-performance.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - name: Universal app build
         shell: bash
         run: |
@@ -47,7 +65,7 @@ jobs:
           python3 - <<'PYCODE'
           from pathlib import Path
           for log in Path('.build').glob('*.log'):
-              if log.name == 'benchmark.log':
+              if log.name == 'benchmark.log' or 'performance' in log.name:
                   continue
               lines = log.read_text().splitlines()
               positions = [i for i, line in enumerate(lines) if 'error:' in line.lower() or 'fatal error' in line.lower() or 'assertion failed' in line.lower()]

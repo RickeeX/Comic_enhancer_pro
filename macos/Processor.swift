@@ -38,36 +38,51 @@ enum Processor {
     static func processCore(_ image: CGImage, settings: Settings) throws -> Rendered {
         _ = try settings.validated()
         let iw = image.width, ih = image.height
-        var rgba = [UInt8](repeating: 255, count: iw * ih * 4)
-        let color = CGColorSpace(name: CGColorSpace.sRGB)!
-        let flags = CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.noneSkipLast.rawValue
-        let decoded = rgba.withUnsafeMutableBytes { bytes -> Bool in
-            guard let context = CGContext(data: bytes.baseAddress, width: iw, height: ih,
-                bitsPerComponent: 8, bytesPerRow: iw * 4, space: color, bitmapInfo: flags) else { return false }
-            context.setFillColor(CGColor(gray: 1, alpha: 1)); context.fill(CGRect(x: 0, y: 0, width: iw, height: ih))
-            context.draw(image, in: CGRect(x: 0, y: 0, width: iw, height: ih)); return true
-        }
-        guard decoded else { throw ProcessingError.message("无法分配图像缓冲区。") }
         var o = settings.core
         var ow: UInt32 = 0, oh: UInt32 = 0
         guard ce_dimensions(UInt32(iw), UInt32(ih), &o, &ow, &oh) == 0 else {
             throw ProcessingError.message("输出超过 1 亿像素上限，请降低缩放比例。")
         }
-        var output = [UInt8](repeating: 0, count: Int(ow) * Int(oh) * 4)
-        let status = rgba.withUnsafeBufferPointer { src in
-            output.withUnsafeMutableBufferPointer { dst in
-                ce_process(src.baseAddress, UInt32(iw), UInt32(ih), &o, dst.baseAddress, dst.count)
-            }
-        }
-        guard status == 0 else { throw ProcessingError.message("图像处理失败（\(status)）。") }
-        let data = Data(output)
-        guard let provider = CGDataProvider(data: data as CFData),
-              let result = CGImage(width: Int(ow), height: Int(oh), bitsPerComponent: 8, bitsPerPixel: 32,
-                bytesPerRow: Int(ow) * 4, space: color, bitmapInfo: CGBitmapInfo(rawValue: flags),
-                provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent) else {
-            throw ProcessingError.message("无法创建输出图像。")
+        let result = try makeRGBAImage(width: Int(ow), height: Int(oh)) { output in
+            let status = try withRGBA(image) { src in ce_process(src, UInt32(iw), UInt32(ih), &o, output.baseAddress, output.count) }
+            guard status == 0 else { throw ProcessingError.message("图像处理失败（\(status)）。") }
         }
         return Rendered(original: image, enhanced: result)
+    }
+    // Core routines initialize every output pixel. Transfer ownership directly
+    // to CoreGraphics instead of clearing and copying another full-size bitmap.
+    static func makeRGBAImage(width: Int, height: Int, fill: (UnsafeMutableBufferPointer<UInt8>) throws -> Void) throws -> CGImage {
+        try Pipeline.checkSize(width, height)
+        let count = width*height*4
+        guard let output = malloc(count) else { throw ProcessingError.message("无法分配输出缓冲区。") }
+        var owned = true
+        defer { if owned { free(output) } }
+        try fill(UnsafeMutableBufferPointer(start: output.assumingMemoryBound(to: UInt8.self), count: count))
+        guard let data = CFDataCreateWithBytesNoCopy(kCFAllocatorDefault, output.assumingMemoryBound(to: UInt8.self), count, kCFAllocatorMalloc)
+        else { throw ProcessingError.message("无法创建输出数据。") }
+        owned = false
+        guard let provider = CGDataProvider(data: data) else { throw ProcessingError.message("无法创建图像数据源。") }
+        guard let result = CGImage(width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
+            bytesPerRow: width*4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGBitmapInfo(rawValue: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.noneSkipLast.rawValue),
+            provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent) else {
+            throw ProcessingError.message("无法创建输出图像。")
+        }
+        return result
+    }
+    // Borrow only fully normalized, tightly packed sRGB provider data. Cropped
+    // providers, custom Decode arrays, other color spaces and alpha are drawn
+    // through CoreGraphics so offsets/color management/compositing stay correct.
+    static func withRGBA<T>(_ image: CGImage, _ body: (UnsafePointer<UInt8>) throws -> T) throws -> T {
+        if image.bitsPerComponent == 8, image.bitsPerPixel == 32, image.bytesPerRow == image.width*4,
+           image.bitmapInfo.contains(.byteOrder32Big), image.alphaInfo == .noneSkipLast,
+           image.colorSpace?.name == CGColorSpace.sRGB, image.decode == nil,
+           let data = image.dataProvider?.data, CFDataGetLength(data) == image.width*image.height*4,
+           let bytes = CFDataGetBytePtr(data) {
+            return try withExtendedLifetime(data) { try body(bytes) }
+        }
+        let pixels = try Pipeline.rgba(image)
+        return try pixels.withUnsafeBufferPointer { try body($0.baseAddress!) }
     }
     private static func decodeImage(_ url: URL, preview: Bool) throws -> CGImage {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),

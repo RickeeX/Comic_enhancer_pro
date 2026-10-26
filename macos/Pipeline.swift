@@ -236,19 +236,20 @@ enum Pipeline {
         let ratio = preview ? min(1, 1600/Double(max(logicalW, logicalH))) : 1
         let actualW = max(1, Int((Double(logicalW)*ratio).rounded())), actualH = max(1, Int((Double(logicalH)*ratio).rounded()))
         if actualW != f.image.width || actualH != f.image.height || x != 0 || y != 0 || abs(rw-width) > 0.01 || abs(rh-height) > 0.01 {
-            let pixels = try rgba(f.image); var output = [UInt8](repeating: 255, count: actualW*actualH*4)
             let xr = Double(actualW)/width, yr = Double(actualH)/height
             var rect = [Float(x*xr), Float(y*yr), Float(rw*xr), Float(rh*yr)]
-            let status = pixels.withUnsafeBufferPointer { p in output.withUnsafeMutableBufferPointer { o in rect.withUnsafeMutableBufferPointer { r in
-                ce_canvas(p.baseAddress, UInt32(f.image.width), UInt32(f.image.height), UInt32(actualW), UInt32(actualH), r.baseAddress, Int32(s.resampleMethod), o.baseAddress, o.count)
-            } } }
-            guard status == 0 else { throw ProcessingError.message("页面排版失败（\(status)）。") }
-            if s.pageMode != 0 {
-                var clip = [Float(ml*xr), Float(mt*yr), Float((width-ml-mr)*xr), Float((height-mt-mb)*yr)]
-                let masked = output.withUnsafeMutableBufferPointer { p in clip.withUnsafeMutableBufferPointer { r in ce_whiten_outside(p.baseAddress, UInt32(actualW), UInt32(actualH), r.baseAddress) } }
-                guard masked == 0 else { throw ProcessingError.message("版心裁切失败。") }
+            let resized = try Processor.makeRGBAImage(width: actualW, height: actualH) { output in
+                let status = try Processor.withRGBA(f.image) { input in rect.withUnsafeMutableBufferPointer { r in
+                    ce_canvas(input, UInt32(f.image.width), UInt32(f.image.height), UInt32(actualW), UInt32(actualH), r.baseAddress, Int32(s.resampleMethod), output.baseAddress, output.count)
+                } }
+                guard status == 0 else { throw ProcessingError.message("页面排版失败（\(status)）。") }
+                if s.pageMode != 0 {
+                    var clip = [Float(ml*xr), Float(mt*yr), Float((width-ml-mr)*xr), Float((height-mt-mb)*yr)]
+                    let masked = clip.withUnsafeMutableBufferPointer { ce_whiten_outside(output.baseAddress, UInt32(actualW), UInt32(actualH), $0.baseAddress) }
+                    guard masked == 0 else { throw ProcessingError.message("版心裁切失败。") }
+                }
             }
-            f.image = try image(output, width: actualW, height: actualH)
+            f.image = resized
             if f.grayLevels >= 0 && s.resampleMethod != 0 { f.grayLevels = 0 }
         }
         f.logicalWidth = logicalW; f.logicalHeight = logicalH

@@ -129,6 +129,79 @@ void pageTests(){
  check(ce_smooth_binary(data.data(),20,20,3,1)==0&&data==thin,"thin strokes and endpoints survive repeated smoothing");
  data=rgba(std::vector<uint8_t>(400,128));check(ce_smooth_binary(data.data(),20,20,1,0)==-1,"nonbinary smoothing rejected");
 }
+// Independent, deliberately simple reference kernels protect the optimized
+// integer/sliding implementations against border and stripe-boundary mistakes.
+void optimizedKernelTests(){
+ std::mt19937 rng(97531);
+ for(int w:{1,2,17})for(int h:{1,137}){
+  std::vector<uint8_t> src(size_t(w)*h*4,255);
+  for(size_t i=0;i<src.size();++i)if(i%4!=3)src[i]=rng()%256;
+  for(int method=0;method<3;++method)for(int radius=1;radius<=3;++radius){
+   auto o=ce_defaults();o.blur=1;o.blur_method=method;o.filter_radius=radius;o.threads=4;
+   auto actual=run(src,w,h,o),expected=src,tmp=src;
+   if(method<2){
+    std::vector<float> weights(2*radius+1,1);float total=0;
+    for(int i=0;i<=2*radius;++i){if(!method)for(int j=1;j<=i;++j)weights[i]*=float(2*radius-j+1)/j;total+=weights[i];}
+    for(auto &v:weights)v/=total;
+    for(int pass=0;pass<2;++pass){auto &input=pass?tmp:src;auto &out=pass?expected:tmp;
+     for(int y=0;y<h;++y)for(int x=0;x<w;++x)for(int c=0;c<3;++c){float sum=0;
+      for(int d=-radius;d<=radius;++d){int xx=pass?x:std::clamp(x+d,0,w-1),yy=pass?std::clamp(y+d,0,h-1):y;
+       sum+=input[(size_t(yy)*w+xx)*4+c]*weights[d+radius];}
+      out[(size_t(y)*w+x)*4+c]=uint8_t(std::lround(sum));
+     }
+    }
+   }else{
+    for(int y=0;y<h;++y)for(int x=0;x<w;++x)for(int c=0;c<3;++c){std::vector<uint8_t> window;
+     for(int dy=-radius;dy<=radius;++dy)for(int dx=-radius;dx<=radius;++dx)
+      window.push_back(src[(size_t(std::clamp(y+dy,0,h-1))*w+std::clamp(x+dx,0,w-1))*4+c]);
+     std::sort(window.begin(),window.end());expected[(size_t(y)*w+x)*4+c]=window[window.size()/2];
+    }
+   }
+   check(actual==expected,"optimized filters match independent reference including tiny edges and parallel stripes");
+  }
+ }
+ auto cubic=[](float x){x=std::abs(x);return x<1?(1.5f*x-2.5f)*x*x+1:x<2?((-.5f*x+2.5f)*x-4)*x+2:0;};
+ for(int method=0;method<3;++method)for(int trial=0;trial<15;++trial){
+  int w=1+rng()%35,h=1+rng()%37,ow=1+rng()%51,oh=1+rng()%151;
+  std::vector<uint8_t> src(w*h*4),out(ow*oh*4);for(auto &v:src)v=rng()%256;
+  float r[]={float(int(rng()%20)-10),float(int(rng()%20)-10),float(1+rng()%60),float(1+rng()%60)};
+  check(ce_canvas(src.data(),w,h,ow,oh,r,method,out.data(),out.size())==0,"optimized resampler returns success");
+  for(int y=0;y<oh;++y)for(int x=0;x<ow;++x)for(int c=0;c<4;++c){
+   int expected=255;
+   if(c<3&&x+.5f>=r[0]&&x+.5f<r[0]+r[2]&&y+.5f>=r[1]&&y+.5f<r[1]+r[3]){
+    double sx=(x+.5-r[0])*w/r[2]-.5,sy=(y+.5-r[1])*h/r[3]-.5;
+    int bx=int(std::floor(sx)),by=int(std::floor(sy));
+    if(!method)expected=src[(size_t(std::clamp(int(std::lround(sy)),0,h-1))*w+std::clamp(int(std::lround(sx)),0,w-1))*4+c];
+    else {float value=0;int taps=method==1?2:4;
+     for(int yy=0;yy<taps;++yy)for(int xx=0;xx<taps;++xx){int ix=bx+xx-(method==2),iy=by+yy-(method==2);
+      float wx=method==1?(xx?float(sx-bx):1-float(sx-bx)):cubic(float(sx-ix));
+      float wy=method==1?(yy?float(sy-by):1-float(sy-by)):cubic(float(sy-iy));
+      value+=src[(size_t(std::clamp(iy,0,h-1))*w+std::clamp(ix,0,w-1))*4+c]*wx*wy;
+     }expected=int(std::lround(std::clamp(value,0.f,255.f)));
+    }
+   }
+   check(std::abs(int(out[(size_t(y)*ow+x)*4+c])-expected)<=1,"separable canvas agrees with direct 2D reference within one intensity level");
+  }
+ }
+ for(int pattern=0;pattern<512;++pattern)for(int fill:{0,1}){
+  std::vector<uint8_t> src(5*5*4,255);
+  for(int j=0;j<9;++j)if(pattern&(1<<j))for(int c=0;c<3;++c)src[((j/3+1)*5+j%3+1)*4+c]=0;
+  auto expected=src,actual=src;
+  for(int pass=0;pass<3;++pass){auto input=expected;
+   for(int y=1;y<4;++y)for(int x=1;x<4;++x){bool center=input[(y*5+x)*4]==0;if(!center&&!fill)continue;
+    for(int turn=0;turn<4;++turn){bool match=true;
+     for(int dy=-1;dy<=1;++dy)for(int dx=-1;dx<=1;++dx){if(!dx&&!dy)continue;int xx=dx,yy=dy;
+      for(int k=0;k<turn;++k){int old=xx;xx=-yy;yy=old;}
+      bool want=dy==1;if(!center)want=!want;
+      if((input[((y+yy)*5+x+xx)*4]==0)!=want)match=false;
+     }
+     if(match){for(int c=0;c<3;++c)expected[(y*5+x)*4+c]=center?255:0;break;}
+    }
+   }
+  }
+  check(ce_smooth_binary(actual.data(),5,5,3,fill)==0&&actual==expected,"all 512 binary neighborhoods retain the original rotated-template behavior");
+ }
+}
 int main(int argc,char**argv){
  (void)argv;
  auto o=ce_defaults();std::vector<uint8_t> s;
@@ -181,6 +254,7 @@ int main(int argc,char**argv){
  o.blur=0;o.sharpen=1;r=run(impulse,5,5,o);check(r[48]==224,"unsharp mask kernel");
  advancedTests();
  pageTests();
+ optimizedKernelTests();
  std::cout<<"PASS: "<<checks<<" checks\n";
  if(argc>1){
    std::vector<uint8_t> big(3000*4000*4,255);

@@ -46,14 +46,37 @@ extern "C" int ce_canvas(const uint8_t*src,uint32_t w,uint32_t h,uint32_t ow,uin
             }return samples;
         };
         auto xs=make(ow,w,rect[0],rect[2]),ys=make(oh,h,rect[1],rect[3]);int taps=method==0?1:method==1?2:4;
-        rows(oh,0,[&](uint32_t a,uint32_t b){for(uint32_t y=a;y<b;++y)for(uint32_t x=0;x<ow;++x){
-            auto p=dst+(size_t(y)*ow+x)*4;auto sx=xs[x],sy=ys[y];
-            if(!sx.inside||!sy.inside){p[0]=p[1]=p[2]=p[3]=255;continue;}
-            for(int c=0;c<3;++c){float value=0;
-                for(int yy=0;yy<taps;++yy)for(int xx=0;xx<taps;++xx)value+=src[(size_t(sy.index[yy])*w+sx.index[xx])*4+c]*sx.weight[xx]*sy.weight[yy];
-                p[c]=byte(value);
-            }p[3]=255;
-        }});return 0;
+        rows(oh,0,[&](uint32_t a,uint32_t b){
+            // Only a few horizontally filtered rows are needed at a time.
+            // Reuse them on enlargement: 4+4 taps instead of a 4x4 kernel.
+            std::array<std::vector<float>,4> cache;
+            std::array<int,4> keys{{-1,-1,-1,-1}};
+            if(method)for(int i=0;i<taps;++i)cache[i].resize(size_t(ow)*3);
+            for(uint32_t y=a;y<b;++y){
+                const auto &sy=ys[y];auto line=dst+size_t(y)*ow*4;
+                if(!sy.inside){std::fill_n(line,size_t(ow)*4,255);continue;}
+                std::array<const float*,4> filtered{};
+                if(method)for(int yy=0;yy<taps;++yy){
+                    int iy=sy.index[yy],slot=iy%taps;
+                    if(keys[slot]!=iy){
+                        auto in=src+size_t(iy)*w*4;auto &target=cache[slot];
+                        for(uint32_t x=0;x<ow;++x){const auto &sx=xs[x];if(!sx.inside)continue;
+                            for(int c=0;c<3;++c){float value=0;
+                                for(int xx=0;xx<taps;++xx)value+=in[size_t(sx.index[xx])*4+c]*sx.weight[xx];
+                                target[size_t(x)*3+c]=value;}
+                        }keys[slot]=iy;
+                    }filtered[yy]=cache[slot].data();
+                }
+                for(uint32_t x=0;x<ow;++x){auto p=line+size_t(x)*4;const auto &sx=xs[x];
+                    if(!sx.inside){p[0]=p[1]=p[2]=p[3]=255;continue;}
+                    if(!method){auto in=src+(size_t(sy.index[0])*w+sx.index[0])*4;std::copy_n(in,3,p);}
+                    else for(int c=0;c<3;++c){float value=0;
+                        for(int yy=0;yy<taps;++yy)value+=filtered[yy][size_t(x)*3+c]*sy.weight[yy];
+                        p[c]=byte(value);}
+                    p[3]=255;
+                }
+            }
+        });return 0;
     }catch(...){return -4;}
 }
 extern "C" int ce_despeckle(uint8_t*rgba,uint32_t w,uint32_t h,int32_t diameter,int32_t threshold,int32_t removeEdges){
@@ -78,7 +101,15 @@ extern "C" int ce_content_bounds(const uint8_t*rgba,uint32_t w,uint32_t h,int32_
     if(!pageSize(w,h))return -2;
     try{
         uint32_t left=w,top=h,right=0,bottom=0;bool found=false;
-        components(rgba,w,h,threshold,diameter,[&](const Component &c,bool small){if(small)return;found=true;left=std::min(left,c.left);top=std::min(top,c.top);right=std::max(right,c.right);bottom=std::max(bottom,c.bottom);});
+        if(!diameter){
+            // No component rejection requested: a parallel scan is sufficient.
+            std::mutex merge;
+            rows(h,0,[&](uint32_t a,uint32_t b){uint32_t l=w,t=h,r=0,bt=0;bool any=false;
+                for(uint32_t y=a;y<b;++y)for(uint32_t x=0;x<w;++x)if(luminance(rgba+(size_t(y)*w+x)*4)<=threshold){
+                    l=std::min(l,x);r=std::max(r,x);t=std::min(t,y);bt=y;any=true;}
+                if(any){std::lock_guard<std::mutex> guard(merge);found=true;left=std::min(left,l);right=std::max(right,r);top=std::min(top,t);bottom=std::max(bottom,bt);}
+            });
+        }else components(rgba,w,h,threshold,diameter,[&](const Component &c,bool small){if(small)return;found=true;left=std::min(left,c.left);top=std::min(top,c.top);right=std::max(right,c.right);bottom=std::max(bottom,c.bottom);});
         out[0]=found?left:0;out[1]=found?top:0;out[2]=found?right-left+1:w;out[3]=found?bottom-top+1:h;return 0;
     }catch(...){return -4;}
 }
@@ -93,19 +124,14 @@ extern "C" int ce_smooth_binary(uint8_t*rgba,uint32_t w,uint32_t h,int32_t passe
             rows(h,0,[&](uint32_t a,uint32_t b){for(uint32_t y=a;y<b;++y)for(uint32_t x=0;x<w;++x){
                 if(!x||!y||x+1==w||y+1==h)continue;
                 int center=original[size_t(y)*w+x]==0;if(!center&&!fill)continue;
-                // An isolated one-pixel protrusion with a solid 3-pixel base.
-                // Four rotations; inverse templates fill only open concavities.
-                for(int turn=0;turn<4;++turn){
-                    bool match=true;
-                    for(int dy=-1;dy<=1&&match;++dy)for(int dx=-1;dx<=1;++dx){
-                        if(!dx&&!dy)continue;
-                        int xx=dx,yy=dy;for(int r=0;r<turn;++r){int old=xx;xx=-yy;yy=old;}
-                        bool value=original[size_t(int(y)+yy)*w+int(x)+xx]==0;
-                        bool expected=dy==1; if(!center)expected=!expected;
-                        if(value!=expected){match=false;break;}
-                    }
-                    if(match){auto p=rgba+(size_t(y)*w+x)*4;p[0]=p[1]=p[2]=center?255:0;break;}
-                }
+                // Every template has at least one unlike north/south neighbor.
+                if(original[size_t(y-1)*w+x]==original[size_t(y)*w+x]&&original[size_t(y+1)*w+x]==original[size_t(y)*w+x])continue;
+                // Same four hit/miss templates encoded as neighborhood masks.
+                auto row=original.data()+size_t(y)*w+x;
+                unsigned mask=(row[-int(w)-1]==0)|((row[-int(w)]==0)<<1)|((row[-int(w)+1]==0)<<2)|
+                    ((row[-1]==0)<<3)|((row[1]==0)<<4)|((row[w-1]==0)<<5)|((row[w]==0)<<6)|((row[w+1]==0)<<7);
+                if(!center)mask^=255;
+                if(mask==0xe0||mask==0x07||mask==0x29||mask==0x94){auto p=rgba+(size_t(y)*w+x)*4;p[0]=p[1]=p[2]=center?255:0;}
             }});
         }return 0;
     }catch(...){return -4;}

@@ -61,48 +61,123 @@ void rotateFine(uint8_t*dst,uint32_t w,uint32_t h,float degrees,int threads){
         }
     });
 }
-std::vector<uint8_t> smooth(const uint8_t*src,uint32_t w,uint32_t h,int method,int r,float sigma,int threads){
-    std::vector<uint8_t> out(size_t(w)*h*4,255);
-    if(method<=1){
-        // Separable binomial Gaussian / box: O(radius * pixels), no square kernel.
-        std::vector<uint8_t> tmp(out.size(),255);std::array<float,7> weights{};float sum=0;
-        for(int i=0;i<=2*r;++i){float k=1;if(method==0)for(int j=1;j<=i;++j)k*=float(2*r-j+1)/j;weights[i]=k;sum+=k;}
-        for(auto &v:weights)v/=sum;
-        for(int pass=0;pass<2;++pass){const uint8_t *in=pass?tmp.data():src;auto &target=pass?out:tmp;
-            rows(h,threads,[&](uint32_t a,uint32_t b){for(uint32_t y=a;y<b;++y)for(uint32_t x=0;x<w;++x)for(int ch=0;ch<3;++ch){
-                float v=0;for(int d=-r;d<=r;++d){int xx=pass?int(x):std::clamp(int(x)+d,0,int(w)-1),yy=pass?std::clamp(int(y)+d,0,int(h)-1):int(y);
-                    v+=in[(size_t(yy)*w+xx)*4+ch]*weights[d+r];}
-                target[(size_t(y)*w+x)*4+ch]=byte(v);
-            }});
+// Integer binomial taps are exact (power-of-two denominator), including
+// rounding after each pass. Padded rows remove per-tap edge clamping.
+template<int R> std::vector<uint8_t> gaussian(const uint8_t*src,uint32_t w,uint32_t h,int threads){
+    constexpr int taps=2*R+1, divisor=1<<(2*R);
+    std::array<int,taps> weights{};weights[0]=1;
+    for(int i=1;i<taps;++i)weights[i]=weights[i-1]*(2*R-i+1)/i;
+    std::vector<uint8_t> tmp(size_t(w)*h*4,255),out(tmp.size(),255);
+    rows(h,threads,[&](uint32_t a,uint32_t b){
+        std::vector<uint8_t> padded((size_t(w)+2*R)*4);
+        for(uint32_t y=a;y<b;++y){
+            auto in=src+size_t(y)*w*4;std::copy_n(in,size_t(w)*4,padded.data()+R*4);
+            for(int i=0;i<R;++i){std::copy_n(in,4,padded.data()+i*4);std::copy_n(in+(w-1)*4,4,padded.data()+(size_t(w)+R+i)*4);}
+            for(uint32_t x=0;x<w;++x)for(int c=0;c<3;++c){
+                int sum=0;for(int d=0;d<taps;++d)sum+=padded[(size_t(x)+d)*4+c]*weights[d];
+                tmp[(size_t(y)*w+x)*4+c]=uint8_t((sum+divisor/2)/divisor);
+            }
         }
-    }else{
-        std::array<float,256> range{};std::array<float,49> spatial{};
-        for(int i=0;i<256;++i)range[i]=std::exp(-float(i*i)/(2*sigma*sigma));
-        for(int dy=-r;dy<=r;++dy)for(int dx=-r;dx<=r;++dx)spatial[(dy+r)*(2*r+1)+dx+r]=std::exp(-float(dx*dx+dy*dy)/(2*r*r));
-        rows(h,threads,[&](uint32_t a,uint32_t b){for(uint32_t y=a;y<b;++y)for(uint32_t x=0;x<w;++x){
-            std::array<std::array<uint8_t,49>,3> values{};std::array<float,3> sum{};float weight=0;int n=0;
-            auto center=src+(size_t(y)*w+x)*4;
-            for(int dy=-r;dy<=r;++dy)for(int dx=-r;dx<=r;++dx){
-                auto p=src+(size_t(std::clamp(int(y)+dy,0,int(h)-1))*w+std::clamp(int(x)+dx,0,int(w)-1))*4;
-                float k=method==3?spatial[n]*range[std::abs(int(luminance(p))-luminance(center))]:1;
-                for(int ch=0;ch<3;++ch){if(method==2)values[ch][n]=p[ch];else sum[ch]+=k*p[ch];}
-                weight+=k;++n;
-            }
-            for(int ch=0;ch<3;++ch){
-                if(method==2){std::nth_element(values[ch].begin(),values[ch].begin()+n/2,values[ch].begin()+n);out[(size_t(y)*w+x)*4+ch]=values[ch][n/2];}
-                else out[(size_t(y)*w+x)*4+ch]=byte(sum[ch]/weight);
-            }
-        }});
-    }
-    return out;
+    });
+    rows(h,threads,[&](uint32_t a,uint32_t b){for(uint32_t y=a;y<b;++y){
+        std::array<const uint8_t*,taps> lines{};
+        for(int d=0;d<taps;++d)lines[d]=tmp.data()+size_t(std::clamp(int(y)+d-R,0,int(h)-1))*w*4;
+        for(uint32_t x=0;x<w;++x)for(int c=0;c<3;++c){
+            int sum=0;for(int d=0;d<taps;++d)sum+=lines[d][size_t(x)*4+c]*weights[d];
+            out[(size_t(y)*w+x)*4+c]=uint8_t((sum+divisor/2)/divisor);
+        }
+    }});return out;
 }
+// Sliding sums make both box-filter passes O(pixels), independent of radius.
+std::vector<uint8_t> boxSmooth(const uint8_t*src,uint32_t w,uint32_t h,int r,int threads){
+    int taps=2*r+1;
+    std::vector<uint8_t> tmp(size_t(w)*h*4,255),out(tmp.size(),255);
+    rows(h,threads,[&](uint32_t a,uint32_t b){for(uint32_t y=a;y<b;++y){
+        auto line=src+size_t(y)*w*4;int sum[3]={};
+        for(int d=-r;d<=r;++d)for(int c=0;c<3;++c)sum[c]+=line[std::clamp(d,0,int(w)-1)*4+c];
+        for(uint32_t x=0;x<w;++x){
+            for(int c=0;c<3;++c)tmp[(size_t(y)*w+x)*4+c]=uint8_t((sum[c]+r)/taps);
+            int left=std::clamp(int(x)-r,0,int(w)-1),right=std::clamp(int(x)+r+1,0,int(w)-1);
+            for(int c=0;c<3;++c)sum[c]+=int(line[right*4+c])-line[left*4+c];
+        }
+    }});
+    rows(h,threads,[&](uint32_t a,uint32_t b){
+        std::vector<int> sums(size_t(w)*3);
+        auto add=[&](int y,int sign){auto line=tmp.data()+size_t(std::clamp(y,0,int(h)-1))*w*4;
+            for(uint32_t x=0;x<w;++x)for(int c=0;c<3;++c)sums[size_t(x)*3+c]+=sign*line[size_t(x)*4+c];};
+        for(int d=-r;d<=r;++d)add(int(a)+d,1);
+        for(uint32_t y=a;y<b;++y){
+            for(uint32_t x=0;x<w;++x)for(int c=0;c<3;++c)out[(size_t(y)*w+x)*4+c]=uint8_t((sums[size_t(x)*3+c]+r)/taps);
+            add(int(y)-r,-1);add(int(y)+r+1,1);
+        }
+    });return out;
+}
+// Two-level sliding histograms replace three nth_element calls per pixel.
+// Counts fit in uint8_t for the supported maximum 7x7 kernel.
+std::vector<uint8_t> medianSmooth(const uint8_t*src,uint32_t w,uint32_t h,int r,int threads){
+    std::vector<uint8_t> out(size_t(w)*h*4,255);int target=(2*r+1)*(2*r+1)/2;
+    rows(h,threads,[&](uint32_t a,uint32_t b){for(uint32_t y=a;y<b;++y){
+        uint8_t fine[3][256]={},coarse[3][16]={};
+        auto update=[&](int x,int delta){x=std::clamp(x,0,int(w)-1);
+            for(int dy=-r;dy<=r;++dy){auto p=src+(size_t(std::clamp(int(y)+dy,0,int(h)-1))*w+uint32_t(x))*4;
+                for(int c=0;c<3;++c){fine[c][p[c]]=uint8_t(fine[c][p[c]]+delta);coarse[c][p[c]>>4]=uint8_t(coarse[c][p[c]>>4]+delta);}}};
+        for(int dx=-r;dx<=r;++dx)update(dx,1);
+        for(uint32_t x=0;x<w;++x){
+            for(int c=0;c<3;++c){int sum=0,hi=0,lo=0;
+                while(sum+coarse[c][hi]<=target)sum+=coarse[c][hi++];
+                while(sum+fine[c][hi*16+lo]<=target)sum+=fine[c][hi*16+lo++];
+                out[(size_t(y)*w+x)*4+c]=uint8_t(hi*16+lo);
+            }
+            update(int(x)-r,-1);update(int(x)+r+1,1);
+        }
+    }});return out;
+}
+std::vector<uint8_t> bilateralSmooth(const uint8_t*src,uint32_t w,uint32_t h,int r,float sigma,int threads){
+    std::vector<uint8_t> out(size_t(w)*h*4,255),gray(size_t(w)*h);
+    rows(h,threads,[&](uint32_t a,uint32_t b){for(size_t i=size_t(a)*w;i<size_t(b)*w;++i)gray[i]=luminance(src+i*4);});
+    std::array<float,256> range{};std::array<float,49> spatial{};
+    for(int i=0;i<256;++i)range[i]=std::exp(-float(i*i)/(2*sigma*sigma));
+    for(int dy=-r;dy<=r;++dy)for(int dx=-r;dx<=r;++dx)spatial[(dy+r)*(2*r+1)+dx+r]=std::exp(-float(dx*dx+dy*dy)/(2*r*r));
+    rows(h,threads,[&](uint32_t a,uint32_t b){for(uint32_t y=a;y<b;++y)for(uint32_t x=0;x<w;++x){
+        float sum[3]={},weight=0;int n=0,center=gray[size_t(y)*w+x];
+        for(int dy=-r;dy<=r;++dy){size_t line=size_t(std::clamp(int(y)+dy,0,int(h)-1))*w;
+            for(int dx=-r;dx<=r;++dx){size_t i=line+std::clamp(int(x)+dx,0,int(w)-1);auto p=src+i*4;
+                float k=spatial[n++]*range[std::abs(int(gray[i])-center)];
+                for(int c=0;c<3;++c)sum[c]+=k*p[c];
+                weight+=k;
+            }
+        }
+        auto p=out.data()+(size_t(y)*w+x)*4;for(int c=0;c<3;++c)p[c]=byte(sum[c]/weight);
+    }});return out;
+}
+std::vector<uint8_t> smooth(const uint8_t*src,uint32_t w,uint32_t h,int method,int r,float sigma,int threads){
+    if(method==0){switch(r){case 1:return gaussian<1>(src,w,h,threads);case 2:return gaussian<2>(src,w,h,threads);default:return gaussian<3>(src,w,h,threads);}}
+    if(method==1)return boxSmooth(src,w,h,r,threads);
+    if(method==2&&r>=2)return medianSmooth(src,w,h,r,threads);
+    if(method==3)return bilateralSmooth(src,w,h,r,sigma,threads);
+    // The tiny 3x3 median avoids histogram setup; larger radii use the
+    // sliding implementation above. Keep each channel's exact median.
+    std::vector<uint8_t> out(size_t(w)*h*4,255);
+    rows(h,threads,[&](uint32_t a,uint32_t b){for(uint32_t y=a;y<b;++y)for(uint32_t x=0;x<w;++x){
+        std::array<std::array<uint8_t,9>,3> values{};int n=0;
+        for(int dy=-1;dy<=1;++dy)for(int dx=-1;dx<=1;++dx){
+            auto p=src+(size_t(std::clamp(int(y)+dy,0,int(h)-1))*w+std::clamp(int(x)+dx,0,int(w)-1))*4;
+            for(int c=0;c<3;++c)values[c][n]=p[c];
+            ++n;
+        }
+        for(int c=0;c<3;++c){std::nth_element(values[c].begin(),values[c].begin()+4,values[c].end());out[(size_t(y)*w+x)*4+c]=values[c][4];}
+    }});return out;
+}
+
 void filter(uint8_t*dst,uint32_t w,uint32_t h,const CEOptions&o){
     size_t size=size_t(w)*h*4;
     if(o.blur>0){auto soft=smooth(dst,w,h,o.blur_method,o.filter_radius,o.edge_sigma,o.threads);
         rows(h,o.threads,[&](uint32_t a,uint32_t b){for(size_t i=size_t(a)*w*4;i<size_t(b)*w*4;++i)if(i%4!=3)dst[i]=byte(dst[i]+(soft[i]-float(dst[i]))*o.blur);});}
     if(o.sharpen<=0)return;
-    std::vector<uint8_t> base(dst,dst+size),soft;
-    if(o.sharpen_method==0)soft=smooth(base.data(),w,h,0,o.filter_radius,o.edge_sigma,o.threads);
+    std::vector<uint8_t> snapshot,soft;
+    const uint8_t *base=dst;
+    if(o.sharpen_method==0)soft=smooth(dst,w,h,0,o.filter_radius,o.edge_sigma,o.threads);
+    else {snapshot.assign(dst,dst+size);base=snapshot.data();}
     rows(h,o.threads,[&](uint32_t a,uint32_t b){for(uint32_t y=a;y<b;++y)for(uint32_t x=0;x<w;++x)for(int ch=0;ch<3;++ch){
         size_t i=(size_t(y)*w+x)*4+ch;float delta;
         if(o.sharpen_method==0)delta=base[i]-float(soft[i]);
@@ -125,6 +200,14 @@ void morphology(std::vector<uint8_t>&gray,uint32_t w,uint32_t h,bool expandBlack
 }
 void reduce(uint8_t*dst,uint32_t w,uint32_t h,const CEOptions&o){
     if(!o.binarization&&!o.levels)return;
+    if((o.binarization==1||o.binarization==2)&&!o.cleanup){
+        int threshold=int(o.threshold);
+        if(o.binarization==2){std::array<uint64_t,256> hist{};
+            for(size_t i=0;i<size_t(w)*h;++i)++hist[dst[i*4]];
+            threshold=otsu(hist);}
+        rows(h,o.threads,[&](uint32_t a,uint32_t b){for(size_t i=size_t(a)*w;i<size_t(b)*w;++i){auto p=dst+i*4;p[0]=p[1]=p[2]=p[0]<=threshold?0:255;}});
+        return;
+    }
     std::vector<uint8_t> gray(size_t(w)*h);
     for(size_t i=0;i<gray.size();++i)gray[i]=luminance(dst+i*4);
     if(o.binarization){

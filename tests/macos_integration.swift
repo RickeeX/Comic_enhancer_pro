@@ -4,8 +4,8 @@ import ImageIO
 
 @main
 struct IntegrationTests {
-    static func pdfFixture(_ url: URL, jpeg: Data? = nil, decode: String? = nil, pageScale: Int = 1) throws {
-        let content = "q \(pageScale) 0 0 \(pageScale) 0 0 cm\nq 80 0 0 40 24 60 cm /Im1 Do Q\n1 0 0 rg 10 180 30 20 re f\nQ\n"
+    static func pdfFixture(_ url: URL, jpeg: Data? = nil, decode: String? = nil, pageScale: Int = 1, jpegWidth: Int = 120, jpegHeight: Int = 80, placement: CGSize = CGSize(width:80,height:40)) throws {
+        let content = "q \(pageScale) 0 0 \(pageScale) 0 0 cm\nq \(placement.width) 0 0 \(placement.height) 24 60 cm /Im1 Do Q\n1 0 0 rg 10 180 30 20 re f\nQ\n"
         let pixels: [UInt8] = [0,0,0, 255,255,255, 255,0,0, 0,255,0, 0,0,255, 120,120,120, 200,200,200, 255,255,255]
         var objects: [Data] = [
             Data("<< /Type /Catalog /Pages 2 0 R >>".utf8),
@@ -15,7 +15,7 @@ struct IntegrationTests {
             Data("<< /Length \(content.utf8.count) >>\nstream\n\(content)endstream".utf8)
         ]
         let payload = jpeg ?? Data(pixels)
-        let dimensions = (jpeg == nil ? "/Width 4 /Height 2" : "/Width 120 /Height 80 /Filter /DCTDecode") + (decode.map { " /Decode [\($0)]" } ?? "")
+        let dimensions = (jpeg == nil ? "/Width 4 /Height 2" : "/Width \(jpegWidth) /Height \(jpegHeight) /Filter /DCTDecode") + (decode.map { " /Decode [\($0)]" } ?? "")
         var image = Data("<< /Type /XObject /Subtype /Image \(dimensions) /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length \(payload.count) >>\nstream\n".utf8)
         image.append(payload); image.append(Data("\nendstream".utf8)); objects.append(image)
         var pdf = Data("%PDF-1.4\n".utf8), offsets = [0]
@@ -48,7 +48,32 @@ struct IntegrationTests {
             throw ProcessingError.message(message + ": normalized content bounds \(x) versus \(y)")
         }
     }
+    static func benchmark() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at:folder,withIntermediateDirectories:false)
+        defer { try? FileManager.default.removeItem(at:folder) }
+        let w=5000,h=6000
+        let image = try Processor.makeRGBAImage(width:w,height:h) { pixels in
+            for y in 0..<h { for x in 0..<w {
+                let i=(y*w+x)*4,v=UInt8((x%19<3 && y%31<13 ? 35:180)+(x*17+y*31)%35)
+                pixels[i]=v;pixels[i+1]=v;pixels[i+2]=v;pixels[i+3]=255
+            } }
+        }
+        let source = folder.appendingPathComponent("30MP.png")
+        try Processor.write(image,to:source,settings:Settings())
+        var tone=Stage(.tone);tone.settings.autoLevels=true;tone.settings.contrast=1.1
+        var sharp=Stage(.sharpen);sharp.settings.sharpen=0.4;sharp.settings.filterRadius=3
+        var binary=Stage(.binary);binary.settings.binarization=3
+        let recipe=Recipe(stages:[tone,sharp,binary])
+        let start=Date()
+        let result=try Pipeline.render(PageItem(url:source),recipe:recipe,preview:false)
+        let processed=Date()
+        try Pipeline.write(result,to:folder.appendingPathComponent("output.png"),recipe:recipe)
+        print(String(format:"30 MP native full-size decode + tone + USM + Sauvola: %.0f ms; 1-bit PNG export: %.0f ms",processed.timeIntervalSince(start)*1000,Date().timeIntervalSince(processed)*1000))
+    }
     static func main() throws {
+        if CommandLine.arguments.contains("--benchmark") { try benchmark();return }
+
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -221,6 +246,42 @@ struct IntegrationTests {
         precondition(abs((anisotropicInfo.dpiX ?? 0)-108) < 0.01 && abs((anisotropicInfo.dpiY ?? 0)-144) < 0.01)
         let normalizedPixelAspect = try Pipeline.render(jpegItems[0],recipe:Recipe(stages:[pdfDPI]),preview:false)
         precondition(normalizedPixelAspect.logicalWidth == 80 && normalizedPixelAspect.logicalHeight == 40,"Unequal PDF X/Y PPI ignored")
+        // Exercise the user's exact import path at scanner-sized resolutions,
+        // with real PDF placement DPI and explicit fallback DPI overrides.
+        let scanContext = CGContext(data:nil,width:2400,height:3600,bitsPerComponent:8,bytesPerRow:2400*4,space:space,
+            bitmapInfo:CGImageAlphaInfo.noneSkipLast.rawValue)!
+        scanContext.setFillColor(CGColor(gray:1,alpha:1));scanContext.fill(CGRect(x:0,y:0,width:2400,height:3600))
+        scanContext.setFillColor(CGColor(gray:0,alpha:1));scanContext.fill(CGRect(x:400,y:600,width:1600,height:2400))
+        let scanJPEG = folder.appendingPathComponent("scan.jpg")
+        var jpegSettings = Settings();jpegSettings.format = "jpg"
+        try Processor.write(scanContext.makeImage()!,to:scanJPEG,settings:jpegSettings)
+        let scanPDF = folder.appendingPathComponent("embedded-scan.pdf")
+        try pdfFixture(scanPDF,jpeg:Data(contentsOf:scanJPEG),jpegWidth:2400,jpegHeight:3600,placement:CGSize(width:576,height:864))
+        let scanItem = try PDFLoader.items(scanPDF,embedded:true,dpi:200)[0]
+        let scanOriginal = try PDFLoader.image(scanItem,preview:false)
+        var scanStep = Stage(.resize);scanStep.settings.preservePhysical = true;scanStep.settings.targetDPI = 400;scanStep.settings.resampleMethod = 2
+        for explicit in [false,true] {
+            scanStep.settings.sourceDPI = explicit ? 300 : 0
+            let recipe = Recipe(stages:[scanStep])
+            let small = try Pipeline.render(scanItem,recipe:recipe,preview:true)
+            let full = try Pipeline.render(scanItem,recipe:recipe,preview:false)
+            precondition(full.image.width == 3200 && full.image.height == 4800,"Embedded scan DPI dimensions changed")
+            try sameInkGeometry(scanOriginal,full.image,message:"Embedded JPEG content shrank when resampled to 400 DPI")
+            try sameInkGeometry(small.image,full.image,message:"Embedded JPEG thumbnail/full-size content mismatch")
+            let url = folder.appendingPathComponent("embedded-400-\(explicit).png")
+            try Pipeline.write(full,to:url,recipe:recipe)
+            try sameInkGeometry(scanOriginal,Processor.sourceImage(PageItem(url:url),preview:false),message:"Embedded JPEG export shrank content")
+        }
+        // Borrowed normalized providers and CoreGraphics fallback must agree;
+        // test a cropped provider whose data still includes the parent image.
+        let normalized = try Processor.processCore(image,settings:Settings()).enhanced
+        let direct = try Processor.withRGBA(normalized) { Data(bytes:$0,count:normalized.width*normalized.height*4) }
+        let normalizedPixels = try Pipeline.rgba(normalized)
+        precondition(direct == Data(normalizedPixels),"Borrowed RGBA changes color or row origin")
+        let subimage = normalized.cropping(to:CGRect(x:12,y:9,width:63,height:41))!
+        let subpixels = try Processor.withRGBA(subimage) { Data(bytes:$0,count:subimage.width*subimage.height*4) }
+        let subimagePixels = try Pipeline.rgba(subimage)
+        precondition(subpixels == Data(subimagePixels),"Borrowing ignored a cropped provider offset")
         let horizontal = try Pipeline.stitch(highDPI,highDPI,vertical:false,gap:5)
         let vertical = try Pipeline.stitch(highDPI,highDPI,vertical:true,gap:7)
         precondition(horizontal.image.width == 645 && horizontal.image.height == 213 && horizontal.grayLevels == 2)
