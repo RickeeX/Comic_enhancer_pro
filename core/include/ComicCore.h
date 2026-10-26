@@ -78,6 +78,7 @@ int ce_invert(uint8_t *pixels, uint32_t width, uint32_t height);
 typedef struct CEGrayWorkspace CEGrayWorkspace;
 CEGrayWorkspace *ce_gray_workspace_create(void);
 void ce_gray_workspace_destroy(CEGrayWorkspace *workspace);
+void ce_gray_workspace_trim(CEGrayWorkspace *workspace,size_t retained_bytes);
 void ce_gray_workspace_backend(CEGrayWorkspace *workspace, int32_t backend);
 int ce_gray_supported(const CEOptions *options);
 int ce_process_gray(const uint8_t *src,uint32_t w,uint32_t h,const CEOptions *options,uint8_t *dst,size_t capacity,CEGrayWorkspace *workspace);

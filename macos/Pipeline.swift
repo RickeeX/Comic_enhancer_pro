@@ -72,7 +72,7 @@ enum Pipeline {
     static func checkSize(_ w: Int, _ h: Int) throws {
         guard w > 0, h > 0, w <= 50000, h <= 50000, w <= 100_000_000 / h else { throw ProcessingError.message("输出超过 1 亿像素或单边 5 万像素，请降低 DPI 或页面尺寸。") }
     }
-    static func render(_ item: PageItem, recipe: Recipe, preview: Bool, pageIndex: Int = 0, cancelled: () -> Bool = { false }, materialize: Bool = true) throws -> PipelineResult {
+    static func render(_ item: PageItem, recipe: Recipe, preview: Bool, pageIndex: Int = 0, cancelled: () -> Bool = { false }, materialize: Bool = true, grayWorkspace: GrayWorkspace? = nil) throws -> PipelineResult {
         if cancelled() { throw CancellationError() }
         _ = try recipe.validated()
         let source = try sourceInfo(item)
@@ -81,7 +81,9 @@ enum Pipeline {
         var f = PipelineResult(original: original, image: original, logicalWidth: source.width, logicalHeight: source.height,
             dpiX: source.dpiX ?? 300, dpiY: source.dpiY ?? 300,
             grayLevels: original.colorSpace?.model == .monochrome ? (original.bitsPerComponent == 1 ? 2 : 0) : -1, source: source)
-        let workspace = try GrayWorkspace()
+        let workspace:GrayWorkspace
+        if let existing=grayWorkspace { workspace=existing } else { workspace=try GrayWorkspace() }
+        defer { ce_gray_workspace_trim(workspace.core,64*1024*1024) }
         if original.colorSpace?.model == .monochrome { f.gray = try GrayPlane.normalized(original) }
         let stages=recipe.stages.filter{$0.enabled}
         var index=0

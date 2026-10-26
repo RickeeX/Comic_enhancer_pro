@@ -46,6 +46,7 @@ enum BatchExporter {
         let lock=NSLock();var next=0,done=0,entries=[BatchReport.Entry?](repeating:nil,count:pages.count)
         DispatchQueue.concurrentPerform(iterations:workers) { _ in
             let old=ce_set_thread_budget(Int32(cap));defer { _ = ce_set_thread_budget(old) }
+            let workspace=try? GrayWorkspace()
             while true {
                 lock.lock()
                 if next>=pages.count || cancelled() { lock.unlock();break }
@@ -56,7 +57,7 @@ enum BatchExporter {
                         if cancelled() { throw CancellationError() }
                         let destination=folder.appendingPathComponent(name)
                         guard !duplicates.contains(index),!FileManager.default.fileExists(atPath:destination.path) else { throw ProcessingError.message("输出名称冲突："+name) }
-                        let value=try Pipeline.render(page,recipe:config,preview:false,pageIndex:indices[index],cancelled:cancelled,materialize:false)
+                        let value=try Pipeline.render(page,recipe:config,preview:false,pageIndex:indices[index],cancelled:cancelled,materialize:false,grayWorkspace:workspace)
                         if cancelled() { throw CancellationError() }
                         try Pipeline.write(value,to:destination,recipe:config)
                         return BatchReport.Entry(success:true,message:"OK\t\(page.path)\t\(name)\t\(value.description)\n")

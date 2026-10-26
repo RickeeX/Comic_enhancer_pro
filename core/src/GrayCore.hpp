@@ -106,6 +106,7 @@ void grayReduce(uint8_t*dst,uint32_t w,uint32_t h,const CEOptions&o,CEGrayWorksp
 }
 extern "C" CEGrayWorkspace*ce_gray_workspace_create(){return new(std::nothrow)CEGrayWorkspace;}
 extern "C" void ce_gray_workspace_destroy(CEGrayWorkspace*w){delete w;}
+extern "C" void ce_gray_workspace_trim(CEGrayWorkspace*w,size_t limit){if(w&&w->a.capacity()+w->b.capacity()>limit){std::vector<uint8_t>().swap(w->a);std::vector<uint8_t>().swap(w->b);}}
 extern "C" void ce_gray_workspace_backend(CEGrayWorkspace*w,int32_t backend){if(w&&backend>=0&&backend<=2)w->backend=backend;}
 extern "C" int ce_gray_supported(const CEOptions*o){return o&&graySupported(*o);}
 extern "C" int ce_process_gray(const uint8_t*src,uint32_t w,uint32_t h,const CEOptions*o,uint8_t*dst,size_t capacity,CEGrayWorkspace*workspace){

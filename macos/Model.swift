@@ -52,6 +52,7 @@ final class Model: ObservableObject {
     private var pageIndices: [PageItem: Int] = [:]
     private var spreadAnchor: PageItem?
     private struct PreviewEntry { var recipe: Recipe; var preview: Bool; var index: Int; var date: Date?; var value: PipelineResult }
+    private var previewWorkspace:GrayWorkspace?
     private var previewCache: [PageItem: PreviewEntry] = [:] // Accessed only on queue; at most the visible pair.
     private var loading = false
     private var book = RecipeBook()
@@ -76,7 +77,8 @@ final class Model: ObservableObject {
     private func renderedPreview(_ page: PageItem, recipe: Recipe, preview: Bool, index: Int, cancellation: Cancellation) throws -> PipelineResult {
         let date = (try? page.url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
         if let entry = previewCache[page], entry.recipe.stages == recipe.stages, entry.preview == preview, entry.index == index, entry.date == date { return entry.value }
-        let value = try Pipeline.render(page, recipe: recipe, preview: preview, pageIndex: index, cancelled: { cancellation.isCancelled })
+        if previewWorkspace == nil { previewWorkspace=try GrayWorkspace() }
+        let value = try Pipeline.render(page, recipe: recipe, preview: preview, pageIndex: index, cancelled: { cancellation.isCancelled },grayWorkspace:previewWorkspace)
         previewCache[page] = PreviewEntry(recipe: recipe, preview: preview, index: index, date: date, value: value)
         return value
     }
@@ -193,7 +195,7 @@ final class Model: ObservableObject {
     }
     func clearLibrary() {
         guard !busy && !importing else { return }
-        previewCancellation.cancel(); queue.async { self.previewCache = [:] }; files = []; selection = nil; spreadAnchor = nil; book = RecipeBook(); undo = [:]; redo = [:]; status = "资料库已清空，原文件未删除。"
+        previewCancellation.cancel(); queue.async { self.previewCache = [:];self.previewWorkspace=nil }; files = []; selection = nil; spreadAnchor = nil; book = RecipeBook(); undo = [:]; redo = [:]; status = "资料库已清空，原文件未删除。"
     }
     func preview() {
         guard !loading else { return }
