@@ -9,7 +9,7 @@ jobs:
   core-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: ./scripts/test-core.sh
       - name: Address and undefined behavior sanitizers
         run: |
@@ -22,10 +22,29 @@ jobs:
         os: [macos-15, macos-15-intel]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: ./scripts/test-core.sh
-      - run: ./scripts/test-macos.sh
-      - run: ./scripts/build-macos.sh
+      - name: Native codec integration tests
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p .build
+          ./scripts/test-macos.sh 2>&1 | tee .build/integration.log
+      - name: Universal app build
+        shell: bash
+        run: |
+          set -o pipefail
+          ./scripts/build-macos.sh 2>&1 | tee .build/application.log
+      - name: Surface compiler diagnostics
+        if: failure()
+        run: |
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          for log in Path('.build').glob('*.log'):
+              text = log.read_text()[-12000:]
+              text = text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+              print(f'::error title={log.name}::{text}')
+          PYCODE
       - name: Archive universal application
         run: ditto -c -k --sequesterRsrc --keepParent '.build/Comic Enhancer.app' '.build/ComicEnhancer-macOS-universal.zip'
       - uses: actions/upload-artifact@v4
