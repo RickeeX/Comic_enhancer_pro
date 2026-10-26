@@ -42,6 +42,17 @@ jobs:
           .build/perf-before | tee .build/performance-before.log
           .build/perf-after | tee .build/performance-after.log
           { echo '### 30 MP core, v0.4.1 then current (same runner, O3)'; echo '```text'; cat .build/performance-before.log .build/performance-after.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          def timings(name):
+              return {line.split(': ')[0]: float(line.split(': ')[1].split()[0])
+                      for line in Path(name).read_text().splitlines() if ': ' in line}
+          before = timings('.build/performance-before.log')
+          after = timings('.build/performance-after.log')
+          report = '; '.join(f'{name}: {before[name]:.0f} -> {value:.0f} ms ({before[name]/value:.2f}x)'
+                             for name, value in after.items())
+          print(f'::notice title=30 MP core comparison::{report}')
+          PYCODE
       - name: Native codec integration tests
         shell: bash
         run: |
@@ -54,6 +65,11 @@ jobs:
           set -euo pipefail
           .build/macos-tests --benchmark | tee .build/native-performance.log
           { echo '### Native decode, processing and export'; echo '```text'; cat .build/native-performance.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          for line in Path('.build/native-performance.log').read_text().splitlines():
+              print(f'::notice title=30 MP native pipeline::{line}')
+          PYCODE
       - name: Universal app build
         shell: bash
         run: |
