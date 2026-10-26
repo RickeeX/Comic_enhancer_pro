@@ -1,0 +1,35 @@
+name: Build and test
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  core-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/test-core.sh
+      - name: Address and undefined behavior sanitizers
+        run: |
+          c++ -std=c++17 -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -pthread -I core/include core/src/ComicCore.cpp tests/core_tests.cpp -o /tmp/core-sanitized
+          /tmp/core-sanitized
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/test-core.sh
+      - run: ./scripts/test-macos.sh
+      - run: ./scripts/build-macos.sh
+      - name: Archive universal application
+        run: ditto -c -k --sequesterRsrc --keepParent '.build/Comic Enhancer.app' '.build/ComicEnhancer-macOS-universal.zip'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ComicEnhancer-universal-${{ matrix.os }}
+          path: .build/ComicEnhancer-macOS-universal.zip
+          if-no-files-found: error

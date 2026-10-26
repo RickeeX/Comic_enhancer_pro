@@ -1,0 +1,10 @@
+#!/bin/bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+export MACOSX_DEPLOYMENT_TARGET=13.0
+mkdir -p .build
+xcrun clang++ -std=c++17 -O2 -I core/include -c core/src/ComicCore.cpp -o .build/integration-core.o
+xcrun swiftc -swift-version 5 -O -parse-as-library -import-objc-header core/include/ComicCore.h \
+  macos/Settings.swift macos/Processor.swift tests/macos_integration.swift .build/integration-core.o \
+  -lc++ -framework AppKit -framework ImageIO -framework UniformTypeIdentifiers -o .build/macos-tests
+.build/macos-tests
