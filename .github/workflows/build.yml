@@ -81,6 +81,23 @@ jobs:
               if 'MP ' in line or 'Metal evaluation:' in line:
                   print(f'::notice title=Mac acceleration evaluation::{line}')
           PYCODE
+      - name: Compare complete native stack with v0.4.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./scripts/benchmark-native-comparison.sh 2>&1 | tee .build/native-comparison.log
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          import re
+          fingerprints=[]
+          for variant in ['before','after']:
+              for line in Path(f'.build/native-{variant}-comparison.log').read_text().splitlines():
+                  print(f'::notice title=Native stack {variant} v0.4.2::{line}')
+                  if line.startswith('Native pixel fingerprint: '):
+                      fingerprints.append(line.split(': ')[1])
+          assert len(fingerprints)==2 and fingerprints[0]==fingerprints[1], 'Native full stack changed output pixels'
+
+          PYCODE
       - name: Universal app build
         shell: bash
         run: |

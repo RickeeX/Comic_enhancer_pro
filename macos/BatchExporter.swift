@@ -13,7 +13,7 @@ enum BatchExporter {
     // A deliberately conservative bound on RGBA fallbacks and filter scratch.
     // Complex legacy/layout stacks get the full 100 MP bound and stay serial.
     static func estimatedBytes(_ page:PageItem,recipe:Recipe) -> UInt64 {
-        guard let info=try? Pipeline.sourceInfo(page) else { return 3_000_000_000 }
+        guard let info=try? Pipeline.sourceInfo(page),info.width>0,info.height>0,info.width<=100_000_000/info.height else { return 3_000_000_000 }
         var w=Double(info.width),h=Double(info.height),peak=w*h,x=info.dpiX ?? 300,y=info.dpiY ?? 300
         for stage in recipe.stages where stage.enabled {
             let s=stage.settings

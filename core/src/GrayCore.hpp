@@ -127,19 +127,25 @@ extern "C" int ce_gray_from_rgba(const uint8_t*src,uint32_t w,uint32_t h,uint8_t
     if(!src||!dst||src==dst)return -1;
     if(!w||!h||uint64_t(w)*h>maxPixels)return -2;
     if(n<size_t(w)*h)return -3;
+    try{
     std::atomic<bool>gray{true};rows(h,0,[&](uint32_t a,uint32_t b){for(size_t i=size_t(a)*w;i<size_t(b)*w;++i){auto p=src+i*4;if(p[0]!=p[1]||p[1]!=p[2])gray=false;dst[i]=p[0];}});return gray?0:-5;
+    }catch(...){return -4;}
 }
 extern "C" int ce_gray_to_rgba(const uint8_t*src,uint32_t w,uint32_t h,uint8_t*dst,size_t n){
     if(!src||!dst||src==dst)return -1;
     if(!w||!h||uint64_t(w)*h>maxPixels)return -2;
     if(n<size_t(w)*h*4)return -3;
+    try{
     rows(h,0,[&](uint32_t a,uint32_t b){for(size_t i=size_t(a)*w;i<size_t(b)*w;++i){auto p=dst+i*4;p[0]=p[1]=p[2]=src[i];p[3]=255;}});return 0;
+    }catch(...){return -4;}
 }
 extern "C" int ce_gray_pack(const uint8_t*src,uint32_t w,uint32_t h,int32_t bits,uint8_t*dst,size_t n){
     if(!src||!dst||src==dst||(bits!=1&&bits!=2&&bits!=4&&bits!=8))return -1;
     if(!w||!h||uint64_t(w)*h>maxPixels)return -2;
     size_t stride=(size_t(w)*bits+7)/8;if(n<stride*h)return -3;
+    try{
     rows(h,0,[&](uint32_t a,uint32_t b){for(uint32_t y=a;y<b;++y){auto out=dst+size_t(y)*stride;std::fill_n(out,stride,0);
         for(uint32_t x=0;x<w;++x){int value=(int(src[size_t(y)*w+x])*((1<<bits)-1)+127)/255;size_t bit=size_t(x)*bits;out[bit/8]|=uint8_t(value<<(8-bits-bit%8));}
     }});return 0;
+    }catch(...){return -4;}
 }
