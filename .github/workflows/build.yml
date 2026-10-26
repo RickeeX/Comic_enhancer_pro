@@ -103,7 +103,7 @@ jobs:
         run: |
           set -euo pipefail
           set +e
-          COMIC_TRACE_BATCH=1 .build/macos-tests --benchmark-batch 2>&1 | tee .build/batch-performance.log
+          .build/macos-tests --benchmark-batch 2>&1 | tee .build/batch-performance.log
           batch_status=${PIPESTATUS[0]}
           echo "$batch_status" > .build/batch-exit.txt
           if [[ "$batch_status" != 0 ]]; then cp .build/macos-tests .build/macos-tests.native; exit "$batch_status"; fi
@@ -111,7 +111,8 @@ jobs:
           python3 - <<'PYCODE'
           from pathlib import Path
           for line in Path('.build/batch-performance.log').read_text().splitlines():
-              print(f'::notice title=Bounded batch comparison::{line}')
+              if line.startswith('Batch hardware:') or line.startswith('Four '):
+                  print(f'::notice title=Bounded batch comparison::{line}')
           PYCODE
       - name: Swift and C buffer lifetime stress
         if: ${{ !cancelled() && matrix.os == 'macos-15' }}
@@ -119,7 +120,7 @@ jobs:
         run: |
           set -euo pipefail
           COMIC_SANITIZE=1 ./scripts/test-macos.sh 2>&1 | tee .build/swift-asan.log
-          COMIC_TRACE_BATCH=1 .build/macos-tests --benchmark-batch 2>&1 | tee .build/batch-asan.log
+          .build/macos-tests --benchmark-batch 2>&1 | tee .build/batch-asan.log
       - name: Universal app build
         shell: bash
         run: |
