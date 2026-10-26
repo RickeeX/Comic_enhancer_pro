@@ -72,6 +72,28 @@ int ce_whiten_outside(uint8_t *pixels, uint32_t width, uint32_t height, const fl
 int ce_mirror(const uint8_t *src, uint32_t width, uint32_t height, int32_t horizontal,
               int32_t vertical, uint8_t *dst, size_t capacity);
 int ce_invert(uint8_t *pixels, uint32_t width, uint32_t height);
+/* Gray8: normalized sRGB sample values, one byte per pixel. Same limits.
+   Workspace is private to one render; nullptr uses a temporary workspace.
+   -5 means unsupported options, allowing an exact RGBA fallback. */
+typedef struct CEGrayWorkspace CEGrayWorkspace;
+CEGrayWorkspace *ce_gray_workspace_create(void);
+void ce_gray_workspace_destroy(CEGrayWorkspace *workspace);
+void ce_gray_workspace_backend(CEGrayWorkspace *workspace, int32_t backend);
+int ce_gray_supported(const CEOptions *options);
+int ce_process_gray(const uint8_t *src,uint32_t w,uint32_t h,const CEOptions *options,uint8_t *dst,size_t capacity,CEGrayWorkspace *workspace);
+int ce_gray_from_rgba(const uint8_t *src,uint32_t w,uint32_t h,uint8_t *dst,size_t capacity);
+int ce_gray_to_rgba(const uint8_t *src,uint32_t w,uint32_t h,uint8_t *dst,size_t capacity);
+int ce_gray_pack(const uint8_t *src,uint32_t w,uint32_t h,int32_t bits,uint8_t *dst,size_t capacity);
+int ce_canvas_gray(const uint8_t *src,uint32_t w,uint32_t h,uint32_t ow,uint32_t oh,const float rect[4],int32_t method,uint8_t *dst,size_t capacity);
+int ce_despeckle_gray(uint8_t *p,uint32_t w,uint32_t h,int32_t diameter,int32_t threshold,int32_t edges);
+int ce_content_bounds_gray(const uint8_t *p,uint32_t w,uint32_t h,int32_t threshold,int32_t diameter,uint32_t rect[4]);
+int ce_smooth_binary_gray(uint8_t *p,uint32_t w,uint32_t h,int32_t passes,int32_t fill);
+int ce_invert_gray(uint8_t *p,uint32_t w,uint32_t h);
+int ce_mirror_gray(const uint8_t *src,uint32_t w,uint32_t h,int32_t horizontal,int32_t vertical,uint8_t *dst,size_t capacity);
+int ce_whiten_outside_gray(uint8_t *p,uint32_t w,uint32_t h,const float rect[4]);
+int ce_blit_gray(const uint8_t *src,uint32_t w,uint32_t h,uint8_t *dst,uint32_t dw,uint32_t dh,uint32_t x,uint32_t y,size_t capacity);
+/* Per-calling-thread cap for a bounded page pipeline. Returns previous cap. */
+int32_t ce_set_thread_budget(int32_t threads);
 #ifdef __cplusplus
 }
 #endif

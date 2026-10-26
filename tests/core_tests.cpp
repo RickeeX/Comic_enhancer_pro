@@ -202,6 +202,48 @@ void optimizedKernelTests(){
   check(ce_smooth_binary(actual.data(),5,5,3,fill)==0&&actual==expected,"all 512 binary neighborhoods retain the original rotated-template behavior");
  }
 }
+void grayTests(){
+ std::mt19937 rng(86420);auto workspace=ce_gray_workspace_create();check(workspace!=nullptr,"gray workspace created");
+ for(int trial=0;trial<100;++trial){uint32_t w=1+rng()%37,h=trial%3==0?197:1+rng()%29;
+  std::vector<uint8_t> gray(size_t(w)*h),rgba(gray.size()*4,255);for(size_t i=0;i<gray.size();++i){gray[i]=rng()%256;rgba[i*4]=rgba[i*4+1]=rgba[i*4+2]=gray[i];}
+  auto o=ce_defaults();o.rotation=trial%4;o.auto_levels=trial%2;o.brightness=.03f;o.contrast=1.1f;o.gamma=1.1f;
+  o.blur=trial%2?.3f:0;o.blur_method=trial%2;o.filter_radius=trial%3+1;o.sharpen=.6f;o.sharpen_method=trial%2;o.sharpen_threshold=2;
+  o.binarization=trial%4;o.adaptive_radius=trial%3==0?100:20;o.threads=trial%2?1:4;
+  if(!o.binarization){o.levels=4;o.dither=trial%3;}
+  uint32_t ow,oh;check(ce_dimensions(w,h,&o,&ow,&oh)==0,"gray dimensions");
+  auto reference=run(rgba,w,h,o);std::vector<uint8_t> result(size_t(ow)*oh);
+  for(int backend:{1,2}){ce_gray_workspace_backend(workspace,backend);
+   check(ce_process_gray(gray.data(),w,h,&o,result.data(),result.size(),workspace)==0,"gray processor success");
+   for(size_t i=0;i<result.size();++i)check(result[i]==reference[i*4],"Gray8 equals RGBA through LUT, convolution, rotation, threshold and diffusion");
+  }
+  std::vector<uint8_t> compact(gray.size()),expanded(rgba.size());
+  check(ce_gray_from_rgba(rgba.data(),w,h,compact.data(),compact.size())==0&&compact==gray,"gray extraction exact");
+  check(ce_gray_to_rgba(gray.data(),w,h,expanded.data(),expanded.size())==0&&expanded==rgba,"gray expansion exact");
+  for(int method=0;method<3;++method){uint32_t cw=w+7,ch=h+5;float rect[]={2,1,float(w)*1.3f,float(h)*1.2f};std::vector<uint8_t> a(size_t(cw)*ch),b(a.size()*4);
+   check(ce_canvas_gray(gray.data(),w,h,cw,ch,rect,method,a.data(),a.size())==0&&ce_canvas(rgba.data(),w,h,cw,ch,rect,method,b.data(),b.size())==0,"gray canvas success");
+   for(size_t i=0;i<a.size();++i)check(a[i]==b[i*4],"gray canvas samples equal RGBA");
+  }
+  for(int bits:{1,2,4,8}){size_t stride=(w*bits+7)/8;std::vector<uint8_t> packed(stride*h,0);
+   check(ce_gray_pack(gray.data(),w,h,bits,packed.data(),packed.size())==0,"gray bit packing success");
+   for(uint32_t y=0;y<h;++y)for(uint32_t x=0;x<w;++x){int value=(packed[size_t(y)*stride+x*bits/8]>>(8-bits-x*bits%8))&((1<<bits)-1);
+    check(value==(int(gray[size_t(y)*w+x])*((1<<bits)-1)+127)/255,"gray packing preserves quantization");}
+  }
+  std::vector<uint8_t> binary(gray.size()),binaryRGBA(rgba.size(),255);
+  for(size_t i=0;i<gray.size();++i){binary[i]=gray[i]<=127?0:255;binaryRGBA[i*4]=binaryRGBA[i*4+1]=binaryRGBA[i*4+2]=binary[i];}
+  check(ce_smooth_binary_gray(binary.data(),w,h,3,1)==0&&ce_smooth_binary(binaryRGBA.data(),w,h,3,1)==0,"gray templates success");
+  for(size_t i=0;i<gray.size();++i)check(binary[i]==binaryRGBA[i*4],"gray templates equal RGBA");
+  auto original=gray;auto originalRGBA=rgba;
+  check(ce_despeckle_gray(gray.data(),w,h,2,127,1)==0&&ce_despeckle(rgba.data(),w,h,2,127,1)==0,"gray components success");
+  for(size_t i=0;i<gray.size();++i)check(gray[i]==rgba[i*4],"gray components equal RGBA");
+  uint32_t a[4],b[4];check(ce_content_bounds_gray(original.data(),w,h,127,trial%3,a)==0&&ce_content_bounds(originalRGBA.data(),w,h,127,trial%3,b)==0&&std::equal(a,a+4,b),"gray content bounds equal RGBA");
+ }
+ auto o=ce_defaults();uint8_t src[]={10,20,30,255},dst[4];
+ check(ce_gray_from_rgba(src,1,1,dst,1)==-5,"color is never silently treated as gray");
+ check(ce_process_gray(src,1,1,&o,dst,0,workspace)==-3,"gray output capacity checked");
+ o.blur=1;o.blur_method=3;check(!ce_gray_supported(&o)&&ce_process_gray(src,1,1,&o,dst,1,workspace)==-5,"unsupported gray mode requests RGBA fallback");
+ ce_gray_workspace_destroy(workspace);
+ check(ce_set_thread_budget(2)==0&&ce_set_thread_budget(0)==2,"page thread budget restores correctly");
+}
 int main(int argc,char**argv){
  (void)argv;
  auto o=ce_defaults();std::vector<uint8_t> s;
@@ -255,6 +297,7 @@ int main(int argc,char**argv){
  advancedTests();
  pageTests();
  optimizedKernelTests();
+ grayTests();
  std::cout<<"PASS: "<<checks<<" checks\n";
  if(argc>1){
    std::vector<uint8_t> big(3000*4000*4,255);

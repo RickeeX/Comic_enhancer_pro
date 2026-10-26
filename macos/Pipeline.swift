@@ -15,6 +15,9 @@ struct SourceInfo {
 struct PipelineResult {
     var original: CGImage
     var image: CGImage
+    var gray: GrayPlane? = nil
+    var pixelWidth: Int { gray?.width ?? image.width }
+    var pixelHeight: Int { gray?.height ?? image.height }
     var logicalWidth: Int
     var logicalHeight: Int
     var dpiX: Double
@@ -69,7 +72,7 @@ enum Pipeline {
     static func checkSize(_ w: Int, _ h: Int) throws {
         guard w > 0, h > 0, w <= 50000, h <= 50000, w <= 100_000_000 / h else { throw ProcessingError.message("输出超过 1 亿像素或单边 5 万像素，请降低 DPI 或页面尺寸。") }
     }
-    static func render(_ item: PageItem, recipe: Recipe, preview: Bool, pageIndex: Int = 0, cancelled: () -> Bool = { false }) throws -> PipelineResult {
+    static func render(_ item: PageItem, recipe: Recipe, preview: Bool, pageIndex: Int = 0, cancelled: () -> Bool = { false }, materialize: Bool = true) throws -> PipelineResult {
         if cancelled() { throw CancellationError() }
         _ = try recipe.validated()
         let source = try sourceInfo(item)
@@ -78,20 +81,23 @@ enum Pipeline {
         var f = PipelineResult(original: original, image: original, logicalWidth: source.width, logicalHeight: source.height,
             dpiX: source.dpiX ?? 300, dpiY: source.dpiY ?? 300,
             grayLevels: original.colorSpace?.model == .monochrome ? (original.bitsPerComponent == 1 ? 2 : 0) : -1, source: source)
+        let workspace = try GrayWorkspace()
+        if original.colorSpace?.model == .monochrome { f.gray = try GrayPlane.normalized(original) }
         for stage in recipe.stages where stage.enabled {
             if cancelled() { throw CancellationError() }
-            try autoreleasepool { try apply(stage, to: &f, preview: preview, pageIndex: pageIndex) }
+            try autoreleasepool { try apply(stage, to: &f, preview: preview, pageIndex: pageIndex, workspace: workspace) }
         }
         if cancelled() { throw CancellationError() }
+        if materialize, let gray = f.gray { f.image = try gray.rgbaImage() }
         return f
     }
-    private static func apply(_ stage: Stage, to f: inout PipelineResult, preview: Bool, pageIndex: Int) throws {
+    private static func apply(_ stage: Stage, to f: inout PipelineResult, preview: Bool, pageIndex: Int, workspace: GrayWorkspace) throws {
         let s = stage.settings
         var core = Settings()
-        let ratio = min(Double(f.image.width)/Double(f.logicalWidth), Double(f.image.height)/Double(f.logicalHeight))
+        let ratio = min(Double(f.pixelWidth)/Double(f.logicalWidth), Double(f.pixelHeight)/Double(f.logicalHeight))
         switch stage.kind {
         case .page, .resize, .rotate, .deskew, .crop, .layout:
-            try geometry(pageSettings(stage), frame: &f, preview: preview, pageIndex: pageIndex); return
+            try geometry(pageSettings(stage), frame: &f, preview: preview, pageIndex: pageIndex, workspace: workspace); return
         case .tone:
             if s.brightness == 0 && s.contrast == 1 && s.gamma == 1 && s.whitePoint == 1 && !s.autoLevels { return }
             core.brightness = s.brightness; core.contrast = s.contrast; core.gamma = s.gamma; core.whitePoint = s.whitePoint; core.autoLevels = s.autoLevels
@@ -114,36 +120,60 @@ enum Pipeline {
             if s.binarization == 0 { return }
             core.binarization = s.binarization; core.threshold = s.threshold; core.sauvolaK = s.sauvolaK
             core.adaptiveRadius = max(1, min(100, Int((Double(s.adaptiveRadius)*ratio).rounded())))
-            f.image = try Processor.processCore(f.image, settings: core).enhanced; f.grayLevels = 2
-            if s.edgeSmooth {
+            try pixels(core, frame: &f, workspace: workspace); f.grayLevels = 2
+            if f.gray == nil { f.gray=try GrayPlane.normalized(f.image) }
+            if s.edgeSmooth, let gray = f.gray {
+                f.gray = try gray.editing { out in
+                    guard ce_smooth_binary_gray(out.baseAddress, UInt32(gray.width), UInt32(gray.height), Int32(s.smoothPasses), s.fillNotches ? 1 : 0) == 0 else { throw ProcessingError.message("灰度边缘修整失败。") }
+                }
+            } else if s.edgeSmooth {
                 var data = try rgba(f.image)
-                let status = data.withUnsafeMutableBufferPointer { ce_smooth_binary($0.baseAddress, UInt32(f.image.width), UInt32(f.image.height), Int32(s.smoothPasses), s.fillNotches ? 1 : 0) }
+                let status = data.withUnsafeMutableBufferPointer { ce_smooth_binary($0.baseAddress, UInt32(f.pixelWidth), UInt32(f.pixelHeight), Int32(s.smoothPasses), s.fillNotches ? 1 : 0) }
                 guard status == 0 else { throw ProcessingError.message("二值边缘修整失败（\(status)）。") }
-                f.image = try image(data, width: f.image.width, height: f.image.height)
+                f.image = try image(data, width: f.pixelWidth, height: f.pixelHeight)
             }
             return
         case .despeckle:
             if s.despeckleDiameter == 0 && !s.removeBorders { return }
-            var data = try rgba(f.image)
             let diameter = s.despeckleDiameter == 0 ? 0 : max(1, Int((Double(s.despeckleDiameter)*ratio).rounded()))
-            let status = data.withUnsafeMutableBufferPointer { ce_despeckle($0.baseAddress, UInt32(f.image.width), UInt32(f.image.height), Int32(diameter), Int32(s.despeckleThreshold), s.removeBorders ? 1 : 0) }
-            guard status == 0 else { throw ProcessingError.message("去斑失败（\(status)）。") }
-            f.image = try image(data, width: f.image.width, height: f.image.height); return
-        case .invert:
+            if let gray = f.gray {
+                f.gray = try gray.editing { out in
+                    guard ce_despeckle_gray(out.baseAddress, UInt32(gray.width), UInt32(gray.height), Int32(diameter), Int32(s.despeckleThreshold), s.removeBorders ? 1 : 0) == 0 else { throw ProcessingError.message("灰度去斑失败。") }
+                }; return
+            }
             var data = try rgba(f.image)
-            let status = data.withUnsafeMutableBufferPointer { ce_invert($0.baseAddress, UInt32(f.image.width), UInt32(f.image.height)) }
+            let status = data.withUnsafeMutableBufferPointer { ce_despeckle($0.baseAddress, UInt32(f.pixelWidth), UInt32(f.pixelHeight), Int32(diameter), Int32(s.despeckleThreshold), s.removeBorders ? 1 : 0) }
+            guard status == 0 else { throw ProcessingError.message("去斑失败（\(status)）。") }
+            f.image = try image(data, width: f.pixelWidth, height: f.pixelHeight); return
+        case .invert:
+            if let gray=f.gray { f.gray=try gray.editing { out in
+                guard ce_invert_gray(out.baseAddress,UInt32(gray.width),UInt32(gray.height))==0 else { throw ProcessingError.message("灰度反色失败。") }
+            };return }
+            var data = try rgba(f.image)
+            let status = data.withUnsafeMutableBufferPointer { ce_invert($0.baseAddress, UInt32(f.pixelWidth), UInt32(f.pixelHeight)) }
             guard status == 0 else { throw ProcessingError.message("反色失败。") }
-            f.image = try image(data, width: f.image.width, height: f.image.height); return
+            f.image = try image(data, width: f.pixelWidth, height: f.pixelHeight); return
         case .mirror:
             if !s.flipHorizontal && !s.flipVertical { return }
-            let input = try rgba(f.image); var output = input; let w = f.image.width, h = f.image.height
+            if let gray=f.gray {
+                f.gray=try GrayPlane(width:gray.width,height:gray.height) { out in
+                    guard ce_mirror_gray(gray.bytes,UInt32(gray.width),UInt32(gray.height),s.flipHorizontal ? 1:0,s.flipVertical ? 1:0,out.baseAddress,out.count)==0 else { throw ProcessingError.message("灰度镜像失败。") }
+                };return
+            }
+            let input = try rgba(f.image); var output = input; let w = f.pixelWidth, h = f.pixelHeight
             let status = input.withUnsafeBufferPointer { p in output.withUnsafeMutableBufferPointer { o in
                 ce_mirror(p.baseAddress, UInt32(w), UInt32(h), s.flipHorizontal ? 1 : 0, s.flipVertical ? 1 : 0, o.baseAddress, o.count)
             } }
             guard status == 0 else { throw ProcessingError.message("镜像失败。") }
             f.image = try image(output, width: w, height: h); return
         }
-        f.image = try Processor.processCore(f.image, settings: core).enhanced
+        try pixels(core, frame: &f, workspace: workspace)
+    }
+    private static func pixels(_ settings: Settings, frame f: inout PipelineResult, workspace: GrayWorkspace) throws {
+        if let gray=f.gray, let result=try gray.process(settings,workspace:workspace) { f.gray=result;return }
+        if let gray=f.gray { f.image=try gray.rgbaImage();f.gray=nil }
+        f.image=try Processor.processCore(f.image,settings:settings).enhanced
+        if f.grayLevels >= 0 { f.gray=try GrayPlane.normalized(f.image) }
     }
     private static func pageSettings(_ stage: Stage) -> Settings {
         let s = stage.settings
@@ -168,44 +198,52 @@ enum Pipeline {
         return p
     }
     private static func crop(_ rect: CGRect, frame f: inout PipelineResult) throws {
-        let bounded = rect.integral.intersection(CGRect(x: 0, y: 0, width: f.image.width, height: f.image.height))
+        let bounded = rect.integral.intersection(CGRect(x: 0, y: 0, width: f.pixelWidth, height: f.pixelHeight))
+        if let gray=f.gray {
+            guard bounded.width >= 1, bounded.height >= 1 else { throw ProcessingError.message("裁切区域为空。") }
+            let cropped=try gray.cropped(bounded)
+            f.logicalWidth=max(1,Int((Double(f.logicalWidth)*Double(cropped.width)/Double(gray.width)).rounded()))
+            f.logicalHeight=max(1,Int((Double(f.logicalHeight)*Double(cropped.height)/Double(gray.height)).rounded()))
+            f.gray=cropped;return
+        }
         guard bounded.width >= 1, bounded.height >= 1, let image = f.image.cropping(to: bounded) else { throw ProcessingError.message("裁切区域为空。") }
-        f.logicalWidth = max(1, Int((Double(f.logicalWidth)*Double(image.width)/Double(f.image.width)).rounded()))
-        f.logicalHeight = max(1, Int((Double(f.logicalHeight)*Double(image.height)/Double(f.image.height)).rounded()))
+        f.logicalWidth = max(1, Int((Double(f.logicalWidth)*Double(image.width)/Double(f.pixelWidth)).rounded()))
+        f.logicalHeight = max(1, Int((Double(f.logicalHeight)*Double(image.height)/Double(f.pixelHeight)).rounded()))
         f.image = try self.image(rgba(image),width:image.width,height:image.height)
     }
-    private static func geometry(_ s: Settings, frame f: inout PipelineResult, preview: Bool, pageIndex: Int) throws {
+    private static func geometry(_ s: Settings, frame f: inout PipelineResult, preview: Bool, pageIndex: Int, workspace: GrayWorkspace) throws {
         if s.sourceDPI > 0 { f.dpiX = s.sourceDPI; if s.sourceDPIY == 0 { f.dpiY = s.sourceDPI } }
         if s.sourceDPIY > 0 { f.dpiY = s.sourceDPIY }
         if s.page != 0 {
-            let half = f.image.width / 2
-            try crop(CGRect(x: s.page == 1 ? 0 : half, y: 0, width: s.page == 1 ? half : f.image.width-half, height: f.image.height), frame: &f)
+            let half = f.pixelWidth / 2
+            try crop(CGRect(x: s.page == 1 ? 0 : half, y: 0, width: s.page == 1 ? half : f.pixelWidth-half, height: f.pixelHeight), frame: &f)
         }
         var left = s.cropLeft + s.crop, right = s.cropRight + s.crop
         if s.alternateMargins && pageIndex % 2 == 1 { swap(&left, &right) }
         let top = s.cropTop + s.crop, bottom = s.cropBottom + s.crop
         if left+right+top+bottom > 0 {
-            try crop(CGRect(x: (Double(f.image.width)*left).rounded(), y: (Double(f.image.height)*top).rounded(),
-                width: (Double(f.image.width)*(1-left-right)).rounded(), height: (Double(f.image.height)*(1-top-bottom)).rounded()), frame: &f)
+            try crop(CGRect(x: (Double(f.pixelWidth)*left).rounded(), y: (Double(f.pixelHeight)*top).rounded(),
+                width: (Double(f.pixelWidth)*(1-left-right)).rounded(), height: (Double(f.pixelHeight)*(1-top-bottom)).rounded()), frame: &f)
         }
         if s.rotation != 0 || s.deskew != 0 || s.angle != 0 {
             var core = Settings(); core.rotation = s.rotation; core.deskew = s.deskew; core.deskewLimit = s.deskewLimit; core.angle = s.angle
-            f.image = try Processor.processCore(f.image, settings: core).enhanced
+            try pixels(core, frame: &f, workspace: workspace)
             if s.rotation % 2 == 1 { swap(&f.logicalWidth, &f.logicalHeight); swap(&f.dpiX, &f.dpiY) }
             if (s.deskew != 0 || s.angle != 0) && f.grayLevels >= 0 { f.grayLevels = 0 }
         }
         if s.autoTrim {
+            if let gray=f.gray { f.image=try gray.rgbaImage();f.gray=nil }
             var data = try rgba(f.image)
             if s.removeBorders {
-                let cleared = data.withUnsafeMutableBufferPointer { ce_despeckle($0.baseAddress, UInt32(f.image.width), UInt32(f.image.height), 0, Int32(s.trimThreshold), 1) }
+                let cleared = data.withUnsafeMutableBufferPointer { ce_despeckle($0.baseAddress, UInt32(f.pixelWidth), UInt32(f.pixelHeight), 0, Int32(s.trimThreshold), 1) }
                 guard cleared == 0 else { throw ProcessingError.message("连边黑区清除失败。") }
             }
             var bounds = [UInt32](repeating: 0, count: 4)
-            let ratio = Double(f.image.width)/Double(f.logicalWidth)
+            let ratio = Double(f.pixelWidth)/Double(f.logicalWidth)
             let ignore = s.trimIgnore == 0 ? 0 : max(1, Int((Double(s.trimIgnore)*ratio).rounded()))
-            let status = data.withUnsafeBufferPointer { p in bounds.withUnsafeMutableBufferPointer { b in ce_content_bounds(p.baseAddress, UInt32(f.image.width), UInt32(f.image.height), Int32(s.trimThreshold), Int32(ignore), b.baseAddress) } }
+            let status = data.withUnsafeBufferPointer { p in bounds.withUnsafeMutableBufferPointer { b in ce_content_bounds(p.baseAddress, UInt32(f.pixelWidth), UInt32(f.pixelHeight), Int32(s.trimThreshold), Int32(ignore), b.baseAddress) } }
             guard status == 0 else { throw ProcessingError.message("自动内容框失败。") }
-            if s.removeBorders { f.image = try image(data, width: f.image.width, height: f.image.height) }
+            if s.removeBorders { f.image = try image(data, width: f.pixelWidth, height: f.pixelHeight) }
             let padding = ceil(Double(s.trimPadding)*ratio)
             try crop(CGRect(x: Double(bounds[0])-padding, y: Double(bounds[1])-padding,
                 width: Double(bounds[2])+padding*2, height: Double(bounds[3])+padding*2), frame: &f)
@@ -238,12 +276,18 @@ enum Pipeline {
         }
         let ratio = preview ? min(1, 1600/Double(max(logicalW, logicalH))) : 1
         let actualW = max(1, Int((Double(logicalW)*ratio).rounded())), actualH = max(1, Int((Double(logicalH)*ratio).rounded()))
-        if actualW != f.image.width || actualH != f.image.height || x != 0 || y != 0 || abs(rw-width) > 0.01 || abs(rh-height) > 0.01 {
+        if actualW != f.pixelWidth || actualH != f.pixelHeight || x != 0 || y != 0 || abs(rw-width) > 0.01 || abs(rh-height) > 0.01 {
             let xr = Double(actualW)/width, yr = Double(actualH)/height
             var rect = [Float(x*xr), Float(y*yr), Float(rw*xr), Float(rh*yr)]
+            if let gray=f.gray {
+                let clip: [Float]? = s.pageMode == 0 ? nil : [Float(ml*xr),Float(mt*yr),Float((width-ml-mr)*xr),Float((height-mt-mb)*yr)]
+                f.gray=try gray.resized(width:actualW,height:actualH,rect:rect,method:s.resampleMethod,clip:clip)
+                if f.grayLevels >= 0 && s.resampleMethod != 0 { f.grayLevels=0 }
+                f.logicalWidth=logicalW;f.logicalHeight=logicalH;return
+            }
             let resized = try Processor.makeRGBAImage(width: actualW, height: actualH) { output in
                 let status = try Processor.withRGBA(f.image) { input in rect.withUnsafeMutableBufferPointer { r in
-                    ce_canvas(input, UInt32(f.image.width), UInt32(f.image.height), UInt32(actualW), UInt32(actualH), r.baseAddress, Int32(s.resampleMethod), output.baseAddress, output.count)
+                    ce_canvas(input, UInt32(f.pixelWidth), UInt32(f.pixelHeight), UInt32(actualW), UInt32(actualH), r.baseAddress, Int32(s.resampleMethod), output.baseAddress, output.count)
                 } }
                 guard status == 0 else { throw ProcessingError.message("页面排版失败（\(status)）。") }
                 if s.pageMode != 0 {
@@ -289,6 +333,10 @@ enum Pipeline {
     static func write(_ result: PipelineResult, to url: URL, recipe: Recipe) throws {
         var settings = Settings(); settings.format = recipe.format; settings.quality = recipe.quality
         settings.grayscale = result.grayLevels >= 0; settings.levels = max(0, result.grayLevels)
+        if let gray=result.gray {
+            let bits=recipe.format == "jpg" ? 8 : result.grayLevels == 2 ? 1 : result.grayLevels == 4 ? 2 : result.grayLevels == 16 ? 4 : 8
+            try Processor.writeEncoded(gray.exportImage(bits:bits),to:url,settings:settings,dpiX:result.dpiX,dpiY:result.dpiY);return
+        }
         var image = result.image
         if result.grayLevels >= 0 && !(image.bitsPerPixel == 32 && image.bitsPerComponent == 8 && image.bitmapInfo.contains(.byteOrder32Big)) {
             image = try self.image(rgba(image), width: image.width, height: image.height)

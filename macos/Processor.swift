@@ -105,11 +105,6 @@ enum Processor {
         return image
     }
     static func write(_ image: CGImage, to url: URL, settings: Settings, dpiX: Double? = nil, dpiY: Double? = nil) throws {
-        let type = settings.format == "jpg" ? UTType.jpeg : settings.format == "tiff" ? UTType.tiff : UTType.png
-        let data = NSMutableData()
-        guard let dest = CGImageDestinationCreateWithData(data, type.identifier as CFString, 1, nil) else {
-            throw ProcessingError.message("无法创建输出文件。")
-        }
         // Use an actual grayscale color space for gray exports, reducing storage.
         var export = image
         if settings.grayscale || settings.levels > 0 || settings.binarization != 0 {
@@ -138,12 +133,20 @@ enum Processor {
             }
             export = gray
         }
+        try writeEncoded(export,to:url,settings:settings,dpiX:dpiX,dpiY:dpiY)
+    }
+    static func writeEncoded(_ image: CGImage, to url: URL, settings: Settings, dpiX: Double? = nil, dpiY: Double? = nil) throws {
+        let type = settings.format == "jpg" ? UTType.jpeg : settings.format == "tiff" ? UTType.tiff : UTType.png
+        let data = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(data, type.identifier as CFString, 1, nil) else {
+            throw ProcessingError.message("无法创建输出文件。")
+        }
         var properties: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: settings.quality]
         if let x = dpiX, let y = dpiY, x.isFinite, y.isFinite, x > 0, y > 0 {
             properties[kCGImagePropertyDPIWidth] = x; properties[kCGImagePropertyDPIHeight] = y
             properties[kCGImagePropertyTIFFDictionary] = [kCGImagePropertyTIFFXResolution: x, kCGImagePropertyTIFFYResolution: y, kCGImagePropertyTIFFResolutionUnit: 2]
         }
-        CGImageDestinationAddImage(dest, export, properties as CFDictionary)
+        CGImageDestinationAddImage(dest, image, properties as CFDictionary)
         guard CGImageDestinationFinalize(dest) else { throw ProcessingError.message("编码图像失败。") }
         try (data as Data).write(to: url, options: .atomic)
     }

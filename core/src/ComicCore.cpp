@@ -7,6 +7,11 @@
 #include <new>
 #include <mutex>
 #include <exception>
+#include <atomic>
+#if defined(__APPLE__)
+#include <dispatch/dispatch.h>
+#include <Accelerate/Accelerate.h>
+#endif
 namespace {
 constexpr uint64_t maxPixels = 100000000;
 bool valid(const CEOptions &o) {
@@ -33,18 +38,29 @@ Geometry geometry(uint32_t w,uint32_t h,const CEOptions&o) {
     g.ow=std::max(1u,uint32_t(std::lround(g.rw*o.scale)));
     g.oh=std::max(1u,uint32_t(std::lround(g.rh*o.scale)));return g;
 }
+thread_local int threadBudget=0;
 template<class F> void rows(uint32_t h,int requested,F f) {
     unsigned n=std::min<unsigned>(requested?requested:std::min(8u,std::max(1u,std::thread::hardware_concurrency())),std::max(1u,h/64));
-    std::vector<std::thread> workers;
+    if(threadBudget)n=std::min(n,unsigned(threadBudget));
+    if(n==1){f(0,h);return;}
+    std::atomic<uint32_t> next{0};const uint32_t grain=std::max(64u,(h+n*4-1)/(n*4));
     std::mutex failureMutex;std::exception_ptr failure;
-    auto task=[&](uint32_t a,uint32_t b){
-        try{f(a,b);}catch(...){std::lock_guard<std::mutex> lock(failureMutex);if(!failure)failure=std::current_exception();}
+    auto task=[&]{
+        try{for(;;){uint32_t a=next.fetch_add(grain);if(a>=h)break;f(a,std::min(h,a+grain));}}
+        catch(...){std::lock_guard<std::mutex>lock(failureMutex);if(!failure)failure=std::current_exception();}
     };
-    try { for(unsigned i=1;i<n;++i) workers.emplace_back([&,i]{task(h*i/n,h*(i+1)/n);}); }
-    catch (...) { for(auto&t:workers)t.join(); throw; }
-    task(0,h/n);for(auto&t:workers)t.join();
+#if defined(__APPLE__)
+    // libdispatch reuses system workers and balances smaller chunks across
+    // performance/efficiency cores. Do not bind a page to specific CPU cores.
+    dispatch_apply_f(n,dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),&task,[](void*context,size_t){(*static_cast<decltype(task)*>(context))();});
+#else
+    std::vector<std::thread>workers;
+    try{for(unsigned i=1;i<n;++i)workers.emplace_back(task);}catch(...){for(auto&t:workers)t.join();throw;}
+    task();for(auto&t:workers)t.join();
+#endif
     if(failure)std::rethrow_exception(failure);
 }
+
 uint8_t byte(float v){return uint8_t(std::lround(std::clamp(v,0.f,255.f)));}
 #include "Advanced.hpp"
 }
@@ -133,3 +149,6 @@ extern "C" int ce_estimate_skew(const uint8_t*src,uint32_t w,uint32_t h,int32_t 
 }
 
 #include "PageCore.hpp"
+
+extern "C" int32_t ce_set_thread_budget(int32_t value){int old=threadBudget;threadBudget=std::clamp(value,0,64);return old;}
+#include "GrayCore.hpp"

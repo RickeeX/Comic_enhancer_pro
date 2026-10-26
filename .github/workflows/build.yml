@@ -23,7 +23,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
-      - run: ./scripts/test-core.sh
+      - run: mkdir -p .build; ./scripts/test-core.sh 2>&1 | tee .build/core.log
       - name: Representative processing benchmark
         shell: bash
         run: |
@@ -37,8 +37,8 @@ jobs:
           git fetch --depth=1 origin tag v0.4.1
           mkdir -p .build/baseline
           git archive v0.4.1 core | tar -x -C .build/baseline
-          c++ -std=c++17 -O3 -DNDEBUG -pthread -I core/include .build/baseline/core/src/ComicCore.cpp tests/performance.cpp -o .build/perf-before
-          c++ -std=c++17 -O3 -DNDEBUG -pthread -I core/include core/src/ComicCore.cpp tests/performance.cpp -o .build/perf-after
+          c++ -std=c++17 -O3 -DNDEBUG -pthread -I core/include .build/baseline/core/src/ComicCore.cpp tests/performance.cpp -framework Accelerate -o .build/perf-before
+          c++ -std=c++17 -O3 -DNDEBUG -pthread -I core/include core/src/ComicCore.cpp tests/performance.cpp -framework Accelerate -o .build/perf-after
           .build/perf-before | tee .build/performance-before.log
           .build/perf-after | tee .build/performance-after.log
           { echo '### 30 MP core, v0.4.1 then current (same runner, O3)'; echo '```text'; cat .build/performance-before.log .build/performance-after.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

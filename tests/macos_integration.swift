@@ -289,6 +289,27 @@ struct IntegrationTests {
         let subpixels = try Processor.withRGBA(subimage) { Data(bytes:$0,count:subimage.width*subimage.height*4) }
         let subimagePixels = try Pipeline.rgba(subimage)
         precondition(subpixels == Data(subimagePixels),"Borrowing ignored a cropped provider offset")
+        let monoSource=folder.appendingPathComponent("gray-source.png")
+        let monoPlane=try GrayPlane.normalized(Pipeline.image([255,0,0,255],width:1,height:1)) // colored input must fail safely
+        precondition(monoPlane == nil,"Color data entered the one-channel path")
+        let mono=try GrayPlane(width:137,height:193) { out in
+            for i in 0..<out.count { out[i]=UInt8((i*71)%256) }
+        }
+        try Processor.writeEncoded(mono.exportImage(bits:8),to:monoSource,settings:Settings(),dpiX:300,dpiY:300)
+        var monoResize=Stage(.resize);monoResize.settings.scale=2
+        var monoTone=Stage(.tone);monoTone.settings.brightness=0.04;monoTone.settings.contrast=1.1;monoTone.settings.gamma=1.1
+        var monoBlur=Stage(.blur);monoBlur.settings.blur=0.3;monoBlur.settings.filterRadius=1
+        var monoUSM=Stage(.sharpen);monoUSM.settings.sharpen=0.6;monoUSM.settings.filterRadius=2;monoUSM.settings.sharpenThreshold=2
+        var monoBinary=Stage(.binary);monoBinary.settings.binarization=3;monoBinary.settings.edgeSmooth=true;monoBinary.settings.fillNotches=true
+        let monoRecipe=Recipe(stages:[monoResize,monoTone,monoBlur,monoUSM,monoBinary])
+        let monoResult=try Pipeline.render(PageItem(url:monoSource),recipe:monoRecipe,preview:false)
+        precondition(monoResult.gray != nil && monoResult.gray!.width==274 && monoResult.gray!.height==386,"Gray8 path was lost across operations")
+        let monoLazy=try Pipeline.render(PageItem(url:monoSource),recipe:monoRecipe,preview:false,materialize:false)
+        let monoURL=folder.appendingPathComponent("gray-export.png")
+        try Pipeline.write(monoLazy,to:monoURL,recipe:monoRecipe)
+        let monoDecoded=try Processor.render(monoURL,settings:Settings(),preview:false).enhanced
+        let monoDisplayPixels=try Pipeline.rgba(monoResult.image),monoDecodedPixels=try Pipeline.rgba(monoDecoded)
+        precondition(Data(monoDisplayPixels) == Data(monoDecodedPixels),"Gray8 display/export pixels differ")
         let horizontal = try Pipeline.stitch(highDPI,highDPI,vertical:false,gap:5)
         let vertical = try Pipeline.stitch(highDPI,highDPI,vertical:true,gap:7)
         precondition(horizontal.image.width == 645 && horizontal.image.height == 213 && horizontal.grayLevels == 2)
