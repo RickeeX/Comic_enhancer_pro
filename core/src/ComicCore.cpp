@@ -8,6 +8,7 @@
 #include <mutex>
 #include <exception>
 #include <atomic>
+#include <memory>
 #if defined(__APPLE__)
 #include <dispatch/dispatch.h>
 #include <Accelerate/Accelerate.h>
@@ -52,7 +53,7 @@ template<class F> void rows(uint32_t h,int requested,F f) {
 #if defined(__APPLE__)
     // libdispatch reuses system workers and balances smaller chunks across
     // performance/efficiency cores. Do not bind a page to specific CPU cores.
-    dispatch_apply_f(n,dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),&task,[](void*context,size_t){(*static_cast<decltype(task)*>(context))();});
+    dispatch_apply_f(n,dispatch_get_global_queue(threadBudget?QOS_CLASS_UTILITY:QOS_CLASS_USER_INITIATED,0),&task,[](void*context,size_t){(*static_cast<decltype(task)*>(context))();});
 #else
     std::vector<std::thread>workers;
     try{for(unsigned i=1;i<n;++i)workers.emplace_back(task);}catch(...){for(auto&t:workers)t.join();throw;}

@@ -113,7 +113,7 @@ extern "C" int ce_process_gray(const uint8_t*src,uint32_t w,uint32_t h,const CEO
     if(!src||!dst||src==dst)return -1;
     if(!graySupported(*o))return -5;
     if(capacity<size_t(ow)*oh)return -3;
-    try{CEGrayWorkspace local;auto &ws=workspace?*workspace:local;auto g=geometry(w,h,*o);int low=0,high=255;
+    try{std::unique_ptr<CEGrayWorkspace>local;if(!workspace){local=std::make_unique<CEGrayWorkspace>();workspace=local.get();}auto &ws=*workspace;auto g=geometry(w,h,*o);int low=0,high=255;
         if(o->auto_levels){std::array<uint64_t,256> hist{};for(uint32_t y=g.y;y<g.y+g.h;++y)for(uint32_t x=g.x;x<g.x+g.w;++x)++hist[src[size_t(y)*w+x]];
             uint64_t tail=uint64_t(g.w)*g.h/200,sum=0;for(;low<255;++low){sum+=hist[low];if(sum>tail)break;}sum=0;for(;high>0;--high){sum+=hist[high];if(sum>tail)break;}if(high<=low){low=0;high=255;}}
         std::array<uint8_t,256>lut{};for(int i=0;i<256;++i){float v=std::clamp((i-low)/float(high-low),0.f,1.f);v=std::clamp(((v-.5f)*o->contrast+.5f+o->brightness)/o->white_point,0.f,1.f);lut[i]=byte(255*std::pow(v,o->gamma));}

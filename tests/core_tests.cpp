@@ -242,6 +242,14 @@ void grayTests(){
  check(ce_gray_from_rgba(src,1,1,dst,1)==-5,"color is never silently treated as gray");
  check(ce_process_gray(src,1,1,&o,dst,0,workspace)==-3,"gray output capacity checked");
  o.blur=1;o.blur_method=3;check(!ce_gray_supported(&o)&&ce_process_gray(src,1,1,&o,dst,1,workspace)==-5,"unsupported gray mode requests RGBA fallback");
+ std::vector<uint8_t> table(65536);
+ for(float amount:{.1f,.3f,.37f,.6f,1.13f,1.99f})for(float threshold:{0.f,2.3f,255.f})for(int sharp:{0,1}){
+  check(ce_gray_blend_table(amount,threshold,sharp,table.data(),table.size())==0,"blend table created");
+  for(int original=0;original<256;++original)for(int soft=0;soft<256;++soft){
+   float delta=original-float(soft),value=sharp?(std::abs(delta)>=threshold?original+amount*delta:float(original)):original+(soft-float(original))*amount;
+   check(table[original*256+soft]==uint8_t(std::lround(std::clamp(value,0.f,255.f))),"all byte-pair blend entries preserve float formula");
+  }
+ }
  ce_gray_workspace_destroy(workspace);
  check(ce_set_thread_budget(2)==0&&ce_set_thread_budget(0)==2,"page thread budget restores correctly");
 }
