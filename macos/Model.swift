@@ -5,47 +5,6 @@ import UniformTypeIdentifiers
 private final class Cancellation: @unchecked Sendable {
     private let lock = NSLock()
     private var stopped = false
-    func exportSpread(vertical: Bool) {
-        guard !busy, displayedIndices.count == 2 else { return }
-        var indices = displayedIndices
-        if rightToLeft && !vertical { indices.reverse() }
-        let pages = indices.map { files[$0] }, plans = indices.map { book.values[files[$0]] ?? .neutral }
-        let alert = NSAlert(); alert.messageText = vertical ? "垂直拼接两页" : "水平拼接两页"
-        alert.informativeText = "分别执行两页各自的操作栈，再按第一页 DPI 匹配第二页并拼接。间距（0–1000 像素）："
-        let field = NSTextField(string:"0"); field.frame = NSRect(x:0,y:0,width:260,height:26);alert.accessoryView = field
-        alert.addButton(withTitle:"继续");alert.addButton(withTitle:"取消")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        guard let gap = Int(field.stringValue), (0...1000).contains(gap) else { error = "间距需为 0–1000 像素。"; return }
-        let panel = NSSavePanel(); let config = recipe
-        panel.allowedContentTypes = [config.format == "jpg" ? .jpeg : config.format == "tiff" ? .tiff : .png]
-        panel.nameFieldStringValue = String(format:"拼接_%04d_%04d.",indices[0],indices[1])+config.format
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        guard !files.contains(where: { $0.url.resolvingSymlinksInPath() == url.resolvingSymlinksInPath() }) else { error = "不能覆盖源文件。"; return }
-        busy = true; completed = 0; total = 2; status = "正在逐页处理并拼接…"
-        let cancel = Cancellation(); cancellation = cancel
-        queue.async {
-            let result = Result { try autoreleasepool { () throws -> Void in
-                let a = try Pipeline.render(pages[0],recipe:plans[0],preview:false,pageIndex:indices[0])
-                guard !cancel.isCancelled else { throw ProcessingError.message("拼接已停止。") }
-                DispatchQueue.main.async { self.completed = 1 }
-                let b = try Pipeline.render(pages[1],recipe:plans[1],preview:false,pageIndex:indices[1])
-                guard !cancel.isCancelled else { throw ProcessingError.message("拼接已停止。") }
-                let merged = try Pipeline.stitch(a,b,vertical:vertical,gap:gap)
-                try Pipeline.write(merged,to:url,recipe:config)
-                let project = Project(pages:pages,recipes:zip(pages,plans).map { Project.PageRecipe(page:$0.0,recipe:$0.1) })
-                let object = try JSONSerialization.jsonObject(with:JSONEncoder().encode(project))
-                let record: [String:Any] = ["operation":"stitch","vertical":vertical,"gapPixels":gap,"project":object,"output":merged.description]
-                try JSONSerialization.data(withJSONObject:record,options:[.prettyPrinted,.sortedKeys]).write(to:url.appendingPathExtension("json"),options:.atomic)
-            } }
-            DispatchQueue.main.async {
-                self.busy = false
-                switch result {
-                case .success: self.completed = 2;self.status = "拼接已导出，参数记录保存在同名 JSON 中。";NSWorkspace.shared.activateFileViewerSelecting([url])
-                case .failure(let e):self.error = e.localizedDescription;self.status = "拼接未完成。"
-                }
-            }
-        }
-    }
     func cancel() { lock.lock(); stopped = true; lock.unlock() }
     var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return stopped }
 }
@@ -360,6 +319,49 @@ final class Model: ObservableObject {
             catch { recordError = "；工程／日志写入失败：\(error.localizedDescription)" }
             let summary = "\(cancel.isCancelled ? "已停止" : "已完成")：成功 \(succeeded)，失败 \(failed)，未处理 \(inputs.count-processed)\(recordError)"
             DispatchQueue.main.async { self.busy = false; self.status = summary; if failed > 0 || !recordError.isEmpty { self.error = summary }; NSWorkspace.shared.activateFileViewerSelecting([folder]) }
+        }
+    }
+    func exportSpread(vertical: Bool) {
+        guard !busy, displayedIndices.count == 2 else { return }
+        var indices = displayedIndices
+        if rightToLeft && !vertical { indices.reverse() }
+        let pages = indices.map { files[$0] }, plans = indices.map { book.values[files[$0]] ?? .neutral }
+        do { for plan in plans { _ = try plan.validated() }; _ = try recipe.validated() }
+        catch { self.error = error.localizedDescription; return }
+        let alert = NSAlert(); alert.messageText = vertical ? "垂直拼接两页" : "水平拼接两页"
+        alert.informativeText = "分别执行两页各自的操作栈，再按第一页 DPI 匹配第二页并拼接。间距（0–1000 像素）："
+        let field = NSTextField(string:"0"); field.frame = NSRect(x:0,y:0,width:260,height:26);alert.accessoryView = field
+        alert.addButton(withTitle:"继续");alert.addButton(withTitle:"取消")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        guard let gap = Int(field.stringValue), (0...1000).contains(gap) else { error = "间距需为 0–1000 像素。"; return }
+        let panel = NSSavePanel(); let config = recipe
+        panel.allowedContentTypes = [config.format == "jpg" ? .jpeg : config.format == "tiff" ? .tiff : .png]
+        panel.nameFieldStringValue = String(format:"拼接_%04d_%04d.",indices[0],indices[1])+config.format
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard !files.contains(where: { $0.url.resolvingSymlinksInPath() == url.resolvingSymlinksInPath() }) else { error = "不能覆盖源文件。"; return }
+        busy = true; completed = 0; total = 2; status = "正在逐页处理并拼接…"
+        let cancel = Cancellation(); cancellation = cancel
+        queue.async {
+            let result = Result { try autoreleasepool { () throws -> Void in
+                let a = try Pipeline.render(pages[0],recipe:plans[0],preview:false,pageIndex:indices[0])
+                guard !cancel.isCancelled else { throw ProcessingError.message("拼接已停止。") }
+                DispatchQueue.main.async { self.completed = 1 }
+                let b = try Pipeline.render(pages[1],recipe:plans[1],preview:false,pageIndex:indices[1])
+                guard !cancel.isCancelled else { throw ProcessingError.message("拼接已停止。") }
+                let merged = try Pipeline.stitch(a,b,vertical:vertical,gap:gap)
+                try Pipeline.write(merged,to:url,recipe:config)
+                let project = Project(pages:pages,recipes:zip(pages,plans).map { Project.PageRecipe(page:$0.0,recipe:$0.1) })
+                let object = try JSONSerialization.jsonObject(with:JSONEncoder().encode(project))
+                let record: [String:Any] = ["operation":"stitch","vertical":vertical,"gapPixels":gap,"project":object,"output":merged.description]
+                try JSONSerialization.data(withJSONObject:record,options:[.prettyPrinted,.sortedKeys]).write(to:url.appendingPathExtension("json"),options:.atomic)
+            } }
+            DispatchQueue.main.async {
+                self.busy = false
+                switch result {
+                case .success: self.completed = 2;self.status = "拼接已导出，参数记录保存在同名 JSON 中。";NSWorkspace.shared.activateFileViewerSelecting([url])
+                case .failure(let e):self.error = e.localizedDescription;self.status = "拼接未完成。"
+                }
+            }
         }
     }
     func cancel() { cancellation.cancel(); status = "将在当前页完成后停止…" }
