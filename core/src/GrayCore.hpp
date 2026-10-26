@@ -130,11 +130,7 @@ extern "C" int ce_process_gray(const uint8_t*src,uint32_t w,uint32_t h,const CEO
         }});
         if(o->blur){graySmooth(dst,ow,oh,o->filter_radius,o->blur_method==1,o->threads,ws);grayBlendTable(ws,o->blur,0,false);rows(oh,o->threads,[&](uint32_t a,uint32_t b){for(size_t i=size_t(a)*ow;i<size_t(b)*ow;++i)dst[i]=ws.blend[size_t(dst[i])*256+ws.b[i]];});}
         if(o->sharpen){if(o->sharpen_method==0){graySmooth(dst,ow,oh,o->filter_radius,false,o->threads,ws);grayBlendTable(ws,o->sharpen,o->sharpen_threshold,true);}else ws.a.assign(dst,dst+size_t(ow)*oh);
-            bool identity=true;for(int i=0;i<256;++i)if(lut[i]!=i){identity=false;break;}
-        rows(oh,o->threads,[&](uint32_t a,uint32_t b){
-            if(ow==g.rw&&oh==g.rh&&o->rotation==0){for(uint32_t y=a;y<b;++y){auto in=src+size_t(g.y+y)*w+g.x;auto out=dst+size_t(y)*ow;
-                if(identity)std::copy_n(in,ow,out);else for(uint32_t x=0;x<ow;++x)out[x]=lut[in[x]];}return;}
-            for(uint32_t y=a;y<b;++y)for(uint32_t x=0;x<ow;++x){size_t i=size_t(y)*ow+x;float delta;
+            rows(oh,o->threads,[&](uint32_t a,uint32_t b){for(uint32_t y=a;y<b;++y)for(uint32_t x=0;x<ow;++x){size_t i=size_t(y)*ow+x;float delta;
                 if(!o->sharpen_method){dst[i]=ws.blend[size_t(dst[i])*256+ws.b[i]];continue;}else{auto get=[&](int xx,int yy){return ws.a[size_t(std::clamp(yy,0,int(oh)-1))*ow+std::clamp(xx,0,int(ow)-1)];};delta=(4.f*ws.a[i]-get(int(x)-1,y)-get(int(x)+1,y)-get(x,int(y)-1)-get(x,int(y)+1))*.25f;}
                 if(std::abs(delta)>=o->sharpen_threshold)dst[i]=byte(dst[i]+o->sharpen*delta);
             }});

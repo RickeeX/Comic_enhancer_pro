@@ -214,7 +214,8 @@ void grayTests(){
   auto reference=run(rgba,w,h,o);std::vector<uint8_t> result(size_t(ow)*oh);
   for(int backend:{1,2}){ce_gray_workspace_backend(workspace,backend);
    check(ce_process_gray(gray.data(),w,h,&o,result.data(),result.size(),workspace)==0,"gray processor success");
-   for(size_t i=0;i<result.size();++i)check(result[i]==reference[i*4],"Gray8 equals RGBA through LUT, convolution, rotation, threshold and diffusion");
+   for(size_t i=0;i<result.size();++i){if(result[i]!=reference[i*4])std::cerr<<"gray trial="<<trial<<" backend="<<backend<<" i="<<i<<" actual="<<int(result[i])<<" expected="<<int(reference[i*4])<<"\n";
+    check(result[i]==reference[i*4],"Gray8 equals RGBA through LUT, convolution, rotation, threshold and diffusion");}
   }
   std::vector<uint8_t> compact(gray.size()),expanded(rgba.size());
   check(ce_gray_from_rgba(rgba.data(),w,h,compact.data(),compact.size())==0&&compact==gray,"gray extraction exact");
