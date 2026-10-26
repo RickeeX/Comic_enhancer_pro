@@ -34,7 +34,7 @@ struct AccelerationBenchmark {
         for trial in -1..<3 {
             let start=Date(),result=try metal.run(plane,blur:blur,usm:usm)
             let ms=Date().timeIntervalSince(start)*1000
-            for i in 0..<count { maximumDifference=max(maximumDifference,abs(Int(result.bytes[i])-Int(reference[i]))) }
+            result.withBytes { bytes in for i in 0..<count { maximumDifference=max(maximumDifference,abs(Int(bytes[i])-Int(reference[i]))) } }
             if trial>=0 { samples.append(ms) }
         }
         guard maximumDifference==0 else { fatalError("Production Metal changed filter pixels") }

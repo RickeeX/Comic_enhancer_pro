@@ -27,7 +27,8 @@ final class MetalFilters {
     private struct Params { var width:UInt32,height:UInt32,radius:UInt32,vertical:UInt32 }
     private init() throws {
         guard let device=MTLCreateSystemDefaultDevice(),let queue=device.makeCommandQueue() else { throw ProcessingError.message("此设备未提供 Metal 计算设备。") }
-        let options=MTLCompileOptions();options.fastMathEnabled=false
+        let options=MTLCompileOptions()
+        if #available(macOS 15.0, *) { options.mathMode = .safe } else { options.fastMathEnabled=false }
         let library=try device.makeLibrary(source:Self.shader,options:options)
         guard let function=library.makeFunction(name:"filter") else { throw ProcessingError.message("无法创建 Metal 滤镜。") }
         self.device=device;self.queue=queue;self.pipeline=try device.makeComputePipelineState(function:function)
@@ -36,7 +37,7 @@ final class MetalFilters {
         guard (1...3).contains(blur.filterRadius),(1...3).contains(usm.filterRadius),blur.blurMethod==0,usm.sharpenMethod==0 else { throw ProcessingError.message("Metal 滤镜配置不适用。") }
         return try autoreleasepool {
             let count=source.width*source.height
-            guard let input=device.makeBuffer(bytes:source.bytes,length:count,options:.storageModeShared),let tmp=device.makeBuffer(length:count,options:.storageModeShared),let blurred=device.makeBuffer(length:count,options:.storageModeShared),let output=device.makeBuffer(length:count,options:.storageModeShared),let bLUT=device.makeBuffer(length:65536,options:.storageModeShared),let sLUT=device.makeBuffer(length:65536,options:.storageModeShared),let commands=queue.makeCommandBuffer() else { throw ProcessingError.message("Metal 位图分配失败。") }
+            guard let input=source.withBytes({device.makeBuffer(bytes:$0,length:count,options:.storageModeShared)}),let tmp=device.makeBuffer(length:count,options:.storageModeShared),let blurred=device.makeBuffer(length:count,options:.storageModeShared),let output=device.makeBuffer(length:count,options:.storageModeShared),let bLUT=device.makeBuffer(length:65536,options:.storageModeShared),let sLUT=device.makeBuffer(length:65536,options:.storageModeShared),let commands=queue.makeCommandBuffer() else { throw ProcessingError.message("Metal 位图分配失败。") }
             guard ce_gray_blend_table(Float(blur.blur),0,0,bLUT.contents().assumingMemoryBound(to:UInt8.self),65536)==0,
                 ce_gray_blend_table(Float(usm.sharpen),Float(usm.sharpenThreshold),1,sLUT.contents().assumingMemoryBound(to:UInt8.self),65536)==0 else { throw ProcessingError.message("Metal 参数无效。") }
             for pass in 0..<4 {
@@ -53,7 +54,7 @@ final class MetalFilters {
             }
             commands.commit();commands.waitUntilCompleted()
             guard commands.status == .completed else { throw commands.error ?? ProcessingError.message("Metal 计算失败。") }
-            return try GrayPlane(width:source.width,height:source.height) { out in out.baseAddress!.update(from:output.contents().assumingMemoryBound(to:UInt8.self),count:count) }
+            return try withExtendedLifetime(output) { try GrayPlane(width:source.width,height:source.height) { out in out.baseAddress!.update(from:output.contents().assumingMemoryBound(to:UInt8.self),count:count) } }
         }
     }
     // One exact canary suite before GPU use. Actual settings use their own

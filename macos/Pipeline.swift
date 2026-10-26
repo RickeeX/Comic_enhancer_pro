@@ -83,7 +83,7 @@ enum Pipeline {
             grayLevels: original.colorSpace?.model == .monochrome ? (original.bitsPerComponent == 1 ? 2 : 0) : -1, source: source)
         let workspace:GrayWorkspace
         if let existing=grayWorkspace { workspace=existing } else { workspace=try GrayWorkspace() }
-        defer { ce_gray_workspace_trim(workspace.core,64*1024*1024) }
+        defer { workspace.trim() }
         if original.colorSpace?.model == .monochrome { f.gray = try GrayPlane.normalized(original) }
         let stages=recipe.stages.filter{$0.enabled}
         var index=0
@@ -175,7 +175,7 @@ enum Pipeline {
             if !s.flipHorizontal && !s.flipVertical { return }
             if let gray=f.gray {
                 f.gray=try GrayPlane(width:gray.width,height:gray.height) { out in
-                    guard ce_mirror_gray(gray.bytes,UInt32(gray.width),UInt32(gray.height),s.flipHorizontal ? 1:0,s.flipVertical ? 1:0,out.baseAddress,out.count)==0 else { throw ProcessingError.message("灰度镜像失败。") }
+                    guard gray.withBytes({ce_mirror_gray($0,UInt32(gray.width),UInt32(gray.height),s.flipHorizontal ? 1:0,s.flipVertical ? 1:0,out.baseAddress,out.count)})==0 else { throw ProcessingError.message("灰度镜像失败。") }
                 };return
             }
             let input = try rgba(f.image); var output = input; let w = f.pixelWidth, h = f.pixelHeight
