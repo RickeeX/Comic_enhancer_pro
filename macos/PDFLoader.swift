@@ -169,7 +169,9 @@ private final class PDFPlacementContext {
 }
 extension PDFLoader {
     private static func scanPlacements(_ content: CGPDFContentStreamRef, context: PDFPlacementContext) {
-        guard context.depth < 8, let table = CGPDFOperatorTableCreate() else { return }
+        guard context.depth < 8 else { return }
+        let table = CGPDFOperatorTableCreate()
+        defer { CGPDFOperatorTableRelease(table) }
         CGPDFOperatorTableSetCallback(table, "q", { _, info in
             guard let info = info else { return }
             let c = Unmanaged<PDFPlacementContext>.fromOpaque(info).takeUnretainedValue(); c.saved.append(c.transform)
@@ -180,7 +182,7 @@ extension PDFLoader {
             if let last = c.saved.popLast() { c.transform = last }
         })
         CGPDFOperatorTableSetCallback(table, "cm", { scanner, info in
-            guard let scanner = scanner, let info = info else { return }
+            guard let info = info else { return }
             let c = Unmanaged<PDFPlacementContext>.fromOpaque(info).takeUnretainedValue()
             var values = [CGPDFReal](repeating: 0, count: 6)
             for i in (0..<6).reversed() { guard CGPDFScannerPopNumber(scanner, &values[i]) else { return } }
@@ -188,13 +190,13 @@ extension PDFLoader {
             c.transform = m.concatenating(c.transform)
         })
         CGPDFOperatorTableSetCallback(table, "Do", { scanner, info in
-            guard let scanner = scanner, let info = info else { return }
+            guard let info = info else { return }
             let c = Unmanaged<PDFPlacementContext>.fromOpaque(info).takeUnretainedValue()
             c.operations += 1; guard c.operations <= 100000 else { return }
             var name: UnsafePointer<CChar>?
             guard CGPDFScannerPopName(scanner, &name), let name = name,
-                  let content = CGPDFScannerGetContentStream(scanner),
-                  let object = CGPDFContentStreamGetResource(content, "XObject", name) else { return }
+                  let object = CGPDFContentStreamGetResource(CGPDFScannerGetContentStream(scanner), "XObject", name) else { return }
+            let content = CGPDFScannerGetContentStream(scanner)
             var stream: CGPDFStreamRef?
             guard CGPDFObjectGetValue(object, .stream, &stream), let stream = stream,
                   let dict = CGPDFStreamGetDictionary(stream) else { return }
@@ -216,13 +218,14 @@ extension PDFLoader {
                 }
                 var resources: CGPDFDictionaryRef?
                 _ = CGPDFDictionaryGetDictionary(dict, "Resources", &resources)
-                if let nested = CGPDFContentStreamCreateWithStream(stream, resources, content) {
-                    c.depth += 1; PDFLoader.scanPlacements(nested, context: c); c.depth -= 1
-                }
+                let nested = CGPDFContentStreamCreateWithStream(stream, resources ?? dict, content)
+                c.depth += 1; PDFLoader.scanPlacements(nested, context: c); c.depth -= 1
+                CGPDFContentStreamRelease(nested)
                 c.transform = saved; c.saved = stack
             }
         })
-        if let scanner = CGPDFScannerCreate(content, table, Unmanaged.passUnretained(context).toOpaque()) { _ = CGPDFScannerScan(scanner) }
+        let scanner = CGPDFScannerCreate(content, table, Unmanaged.passUnretained(context).toOpaque())
+        _ = CGPDFScannerScan(scanner); CGPDFScannerRelease(scanner)
     }
     static func sourceInfo(_ item: PageItem) throws -> SourceInfo {
         lock.lock(); defer { lock.unlock() }
@@ -234,7 +237,8 @@ extension PDFLoader {
             var w: CGPDFInteger = 0, h: CGPDFInteger = 0
             _ = CGPDFDictionaryGetInteger(dict, "Width", &w); _ = CGPDFDictionaryGetInteger(dict, "Height", &h)
             let context = PDFPlacementContext()
-            if let content = CGPDFContentStreamCreateWithPage(page) { scanPlacements(content, context: context) }
+            let content = CGPDFContentStreamCreateWithPage(page)
+            scanPlacements(content, context: context); CGPDFContentStreamRelease(content)
             let size = context.sizes[streams[index]]
             return SourceInfo(width: w, height: h, dpiX: size.map { Double(w) * 72 / $0.width }, dpiY: size.map { Double(h) * 72 / $0.height })
         }

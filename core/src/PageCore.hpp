@@ -1,6 +1,6 @@
 // C entry points for page geometry and topology-aware binary postprocessing.
 namespace {
-bool pageSize(uint32_t w,uint32_t h){return w&&h&&uint64_t(w)*h<=maxPixels;}
+bool pageSize(uint32_t w,uint32_t h){return w&&h&&w<=50000&&h<=50000&&uint64_t(w)*h<=maxPixels;}
 struct Component { uint32_t left,right,top,bottom; std::vector<uint32_t> small; };
 template<class F> void components(const uint8_t *rgba,uint32_t w,uint32_t h,int threshold,int diameter,F visit){
     size_t n=size_t(w)*h;std::vector<uint8_t> seen((n+7)/8);std::vector<uint32_t> stack;

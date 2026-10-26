@@ -49,11 +49,14 @@ jobs:
           for log in Path('.build').glob('*.log'):
               if log.name == 'benchmark.log':
                   continue
-              text = log.read_text()
-              if len(text) > 14000:
-                  text = text[:10000] + '\n...\n' + text[-4000:]
-              text = text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-              print(f'::error title={log.name}::{text}')
+              lines = log.read_text().splitlines()
+              positions = [i for i, line in enumerate(lines) if 'error:' in line.lower() or 'fatal error' in line.lower() or 'assertion failed' in line.lower()]
+              chunks = ['\n'.join(lines[max(0, i-1):i+4]) for i in positions[:16]]
+              if not chunks:
+                  chunks = ['\n'.join(lines[-30:])]
+              for index, text in enumerate(chunks):
+                  text = text[:2500].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+                  print(f'::error title={log.name} diagnostic {index+1}::{text}')
           PYCODE
       - name: Archive universal application
         run: ditto -c -k --sequesterRsrc --keepParent '.build/Comic Enhancer.app' '.build/ComicEnhancer-macOS-universal.zip'

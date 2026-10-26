@@ -213,7 +213,7 @@ struct NumericField: View {
         HStack {
             Text(title).font(.callout)
             Spacer()
-            TextField(title, text: $draft).textFieldStyle(.roundedBorder).frame(width: 100).multilineTextAlignment(.trailing)
+            TextField(title, text: $draft).textFieldStyle(.roundedBorder).frame(width: 100).multilineTextAlignment(.trailing).help("输入数值后按回车应用。")
                 .onSubmit { if let next = Double(draft), next.isFinite { value = next } else { draft = String(format:"%.2f", value) } }
         }.onAppear { draft = String(format:"%.2f",value) }.onChange(of: value) { draft = String(format:"%.2f",$0) }
     }
